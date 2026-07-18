@@ -1,0 +1,16 @@
+import Link from "next/link";
+import { ArrowLeft, BookOpen, ClipboardCheck, School } from "lucide-react";
+import type { DashboardSummary, Identity } from "@/domain/models";
+import { AnnouncementCarousel } from "@/components/announcements/carousel";
+import { StatGrid } from "./stat-grid";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { LinkButton } from "@/components/ui/link-button";
+
+export function DashboardHome({ identity, summary }: { identity: Identity; summary: DashboardSummary }) {
+  const title = identity.role === "admin" ? "إدارة المدرسة" : identity.role === "teacher" ? "مساحة المعلم" : "مساحة الطالب";
+  const description = identity.role === "admin" ? "الحسابات والمجموعات وما يحتاج متابعة الآن." : identity.role === "teacher" ? "ابدأ من مجموعاتك، ثم انتقل للمحتوى أو التصحيح." : "فصولك ودروسك واختباراتك فقط.";
+  const action = identity.role === "admin" ? <LinkButton href="/app/admin/teachers">إنشاء معلم</LinkButton> : identity.role === "teacher" ? <LinkButton href="/app/teacher/groups">فتح مجموعاتي</LinkButton> : <LinkButton href="/app/student/groups">فتح فصولي</LinkButton>;
+  return <div className="grid gap-6"><PageHeader title={title} description={description} action={action}/><AnnouncementCarousel items={summary.announcements}/><StatGrid items={summary.counts}/><section className="grid gap-5 xl:grid-cols-2"><Card><CardTitle>المجموعات</CardTitle><CardDescription>المجموعات المتاحة لك الآن.</CardDescription><div className="mt-5 grid gap-3">{summary.groups.length ? summary.groups.slice(0,4).map((group) => <Link key={group.id} href={`/app/${identity.role}/groups/${group.id}`} className="focus-ring flex items-center justify-between rounded-xl border border-slate-200 p-4 hover:border-sky-200 hover:bg-sky-50/50"><span className="flex items-center gap-3 font-bold"><School className="size-5 text-[#1479b8]"/>{group.name}</span><ArrowLeft className="size-4 text-slate-400"/></Link>) : <EmptyState title="لا توجد مجموعات بعد"/>}</div></Card><Card><CardTitle>{identity.role === "teacher" ? "يحتاج تصحيحًا" : identity.role === "student" ? "أحدث الدروس" : "أحدث الدروس"}</CardTitle><CardDescription>{identity.role === "teacher" ? "التسليمات التي تنتظر درجتك." : "محتوى قريب وسهل الوصول."}</CardDescription><div className="mt-5 grid gap-3">{identity.role === "teacher" ? (summary.pendingSubmissions.length ? summary.pendingSubmissions.slice(0,5).map((submission) => <Link key={submission.id} href={`/app/teacher/submissions/${submission.id}`} className="focus-ring flex items-center gap-3 rounded-xl border border-slate-200 p-4"><ClipboardCheck className="size-5 text-amber-600"/><span className="font-bold">تسليم قيد التصحيح</span></Link>) : <EmptyState title="لا توجد تسليمات معلقة"/>) : (summary.latestLessons.length ? summary.latestLessons.map((lesson) => <Link key={lesson.id} href={identity.role === "student" ? `/app/student/lessons/${lesson.id}` : `/app/teacher/lessons/${lesson.id}/edit`} className="focus-ring flex items-center gap-3 rounded-xl border border-slate-200 p-4"><BookOpen className="size-5 text-emerald-600"/><span className="font-bold">{lesson.title}</span></Link>) : <EmptyState title="لا توجد دروس بعد"/>)}</div></Card></section></div>;
+}

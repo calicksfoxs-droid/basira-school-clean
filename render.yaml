@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: basira-school-platform
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: BASIRA_BACKEND
+        value: supabase
+      - key: BASIRA_APP_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: MAX_VIDEO_UPLOAD_MB
+        value: "250"
+      - key: MAX_HANDOUT_UPLOAD_MB
+        value: "25"
+      - key: MAX_SUBMISSION_UPLOAD_MB
+        value: "20"
