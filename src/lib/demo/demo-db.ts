@@ -1,5 +1,6 @@
 import "server-only";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type { AccessCredential, DemoDatabase, Role, UserRecord } from "@/domain/models";
@@ -134,6 +135,7 @@ function seedDatabase(): DemoDatabase {
       description: "درس تمهيدي بسيط", displayOrder: 1, structureMode: "direct",
       status: "published", publishedAt: now(), createdAt: now(),
     }],
+    learningProgress: [],
     learningEnrollmentReferences: [{
       id: randomUUID(), studentId, fingerprint: fingerprintEnrollmentReference(enrollmentReference),
       maskedReference: maskEnrollmentReference(enrollmentReference), rotatedAt: now(), createdAt: now(),
@@ -150,16 +152,36 @@ function seedDatabase(): DemoDatabase {
 function withCoreDefaults(database: DemoDatabase): DemoDatabase {
   const legacy = database as DemoDatabase & Partial<Pick<DemoDatabase,
     "learningSubjects" | "learningGroups" | "learningMemberships" | "learningUnits" |
-    "learningLessons" | "learningEnrollmentReferences" | "platformSettings" | "userPreferences"
+    "learningLessons" | "learningProgress" | "learningEnrollmentReferences" | "platformSettings" | "userPreferences"
   >>;
   legacy.learningSubjects ??= [];
   legacy.learningGroups ??= [];
   legacy.learningMemberships ??= [];
   legacy.learningUnits ??= [];
   legacy.learningLessons ??= [];
+  legacy.learningProgress ??= [];
   legacy.learningEnrollmentReferences ??= [];
   legacy.platformSettings ??= { platformName: "بصيرة", timezone: "Asia/Riyadh", updatedAt: now() };
   legacy.userPreferences ??= [];
+  for (const subject of legacy.learningSubjects) {
+    if (!legacy.subjects.some((item) => item.id === subject.id)) {
+      legacy.subjects.push({
+        id: subject.id, ownerTeacherId: subject.teacherId, title: subject.title,
+        description: subject.description, displayOrder: subject.displayOrder,
+        status: subject.status, createdAt: subject.createdAt,
+      });
+    }
+  }
+  for (const lesson of legacy.learningLessons) {
+    if (!legacy.lessons.some((item) => item.id === lesson.id)) {
+      legacy.lessons.push({
+        id: lesson.id, subjectId: lesson.subjectId, unitId: lesson.unitId,
+        title: lesson.title, description: lesson.description,
+        displayOrder: lesson.displayOrder, structureMode: lesson.structureMode,
+        status: lesson.status, publishedAt: lesson.publishedAt, createdAt: lesson.createdAt,
+      });
+    }
+  }
   return legacy;
 }
 
@@ -195,7 +217,24 @@ export async function mutateDemoDatabase<T>(fn: (database: DemoDatabase) => T | 
       result = await fn(database);
       const temp = `${dbPath()}.${process.pid}.tmp`;
       await writeFile(temp, JSON.stringify(database, null, 2), "utf8");
-      await rename(temp, dbPath());
+      let replaced = false;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          await rename(temp, dbPath());
+          replaced = true;
+          break;
+        } catch (renameError) {
+          const code = (renameError as NodeJS.ErrnoException).code;
+          if (code !== "EPERM" && code !== "EACCES") throw renameError;
+          await delay(20 * (attempt + 1));
+        }
+      }
+      if (!replaced) {
+        // Windows may keep the destination open briefly (indexer/AV). A direct
+        // queued write is safer than failing the user's action after retries.
+        await writeFile(dbPath(), JSON.stringify(database, null, 2), "utf8");
+        await rm(temp, { force: true });
+      }
     } catch (caught) {
       error = caught;
     }

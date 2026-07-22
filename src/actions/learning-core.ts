@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import {
   createLearningSubjectSchema,
   createSubjectGroupSchema,
@@ -16,6 +16,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { requireIdentity, requireRole } from "@/lib/auth";
 import { AppError } from "@/lib/data/errors";
 import { getLearningCoreStore } from "@/lib/core";
+import { getStore } from "@/lib/data";
 import type { RevealedStudentEnrollmentReference } from "@/domain/core-models";
 
 function text(formData: FormData, key: string) {
@@ -24,6 +25,7 @@ function text(formData: FormData, key: string) {
 }
 
 function optional(value: string) { return value.trim() || undefined; }
+const idSchema = z.string().uuid();
 
 function failure(error: unknown): ActionResult<never> {
   if (error instanceof ZodError) {
@@ -99,6 +101,19 @@ export async function createLearningLessonAction(formData: FormData): Promise<Ac
   } catch (error) { return failure(error); }
 }
 
+export async function publishLearningSubjectAction(formData: FormData): Promise<ActionResult> {
+  try { const identity = await requireRole("admin", "teacher"); await getLearningCoreStore().publishLearningSubject(identity, idSchema.parse(text(formData, "subjectId"))); revalidatePath("/app"); return { ok: true, data: undefined, message: "تم نشر المادة" }; } catch (error) { return failure(error); }
+}
+export async function publishLearningUnitAction(formData: FormData): Promise<ActionResult> {
+  try { const identity = await requireRole("admin", "teacher"); await getLearningCoreStore().publishSubjectUnit(identity, idSchema.parse(text(formData, "unitId"))); revalidatePath("/app"); return { ok: true, data: undefined, message: "تم نشر الوحدة" }; } catch (error) { return failure(error); }
+}
+export async function publishLearningLessonAction(formData: FormData): Promise<ActionResult> {
+  try { const identity = await requireRole("teacher"); await (await getStore()).publishLesson(identity, idSchema.parse(text(formData, "lessonId"))); revalidatePath("/app"); return { ok: true, data: undefined, message: "تم نشر الدرس" }; } catch (error) { return failure(error); }
+}
+export async function completeLearningLessonAction(formData: FormData): Promise<ActionResult> {
+  try { const identity = await requireRole("student"); await getLearningCoreStore().completeLearningLesson(identity, idSchema.parse(text(formData, "lessonId"))); revalidatePath("/app"); return { ok: true, data: undefined, message: "أحسنت! تم تسجيل إنجاز الدرس" }; } catch (error) { return failure(error); }
+}
+
 export async function enrollExistingStudentAction(formData: FormData): Promise<ActionResult<{ studentId: string; displayName: string }>> {
   try {
     const identity = await requireRole("admin", "teacher");
@@ -143,3 +158,17 @@ export async function updateUserPreferencesAction(formData: FormData): Promise<A
     return { ok: true, data: undefined, message: "تم حفظ تفضيلاتك" };
   } catch (error) { return failure(error); }
 }
+
+// Adapters for native server-rendered forms. ActionResult-returning variants
+// above remain available to interactive clients that use useActionState.
+export async function updateLearningSubjectBannerFormAction(formData: FormData): Promise<void> { await updateLearningSubjectBannerAction(formData); }
+export async function createLearningGroupFormAction(formData: FormData): Promise<void> { await createLearningGroupAction(formData); }
+export async function createLearningUnitFormAction(formData: FormData): Promise<void> { await createLearningUnitAction(formData); }
+export async function createLearningLessonFormAction(formData: FormData): Promise<void> { await createLearningLessonAction(formData); }
+export async function enrollExistingStudentFormAction(formData: FormData): Promise<void> { await enrollExistingStudentAction(formData); }
+export async function publishLearningSubjectFormAction(formData: FormData): Promise<void> { await publishLearningSubjectAction(formData); }
+export async function publishLearningUnitFormAction(formData: FormData): Promise<void> { await publishLearningUnitAction(formData); }
+export async function publishLearningLessonFormAction(formData: FormData): Promise<void> { await publishLearningLessonAction(formData); }
+export async function completeLearningLessonFormAction(formData: FormData): Promise<void> { await completeLearningLessonAction(formData); }
+export async function updatePlatformSettingsFormAction(formData: FormData): Promise<void> { await updatePlatformSettingsAction(formData); }
+export async function updateUserPreferencesFormAction(formData: FormData): Promise<void> { await updateUserPreferencesAction(formData); }

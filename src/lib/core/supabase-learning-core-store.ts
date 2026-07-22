@@ -96,18 +96,21 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
 
   async getLearningSubject(_identity: Identity, subjectId: string): Promise<LearningSubjectDetails> {
     const client = await this.client();
-    const [subjectResult, groupResult, unitResult] = await Promise.all([
+    const [subjectResult, groupResult, unitResult, lessonResult] = await Promise.all([
       client.from("subjects").select("*").eq("id", subjectId).single(),
       client.from("groups").select("*").eq("subject_id", subjectId).order("created_at"),
       client.from("subject_units").select("*").eq("subject_id", subjectId).order("display_order"),
+      client.from("lessons").select("*").eq("subject_id", subjectId).order("display_order"),
     ]);
     if (subjectResult.error) throw subjectResult.error;
     if (groupResult.error) throw groupResult.error;
     if (unitResult.error) throw unitResult.error;
+    if (lessonResult.error) throw lessonResult.error;
     return {
       subject: subjectFrom(subjectResult.data as Row),
       groups: ((groupResult.data ?? []) as Row[]).map(groupFrom),
       units: ((unitResult.data ?? []) as Row[]).map(unitFrom),
+      lessons: ((lessonResult.data ?? []) as Row[]).map(lessonFrom),
     };
   }
 
@@ -182,6 +185,29 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return lessonFrom(data as Row);
   }
 
+  async publishLearningSubject(_identity: Identity, subjectId: string): Promise<void> {
+    const client = await this.client();
+    const [groups, units] = await Promise.all([
+      client.from("groups").select("id", { count: "exact", head: true }).eq("subject_id", subjectId).eq("status", "active"),
+      client.from("subject_units").select("id", { count: "exact", head: true }).eq("subject_id", subjectId).eq("status", "published"),
+    ]);
+    if (groups.error || units.error) throw groups.error ?? units.error;
+    assertAllowed((groups.count ?? 0) > 0, "أضف مجموعة نشطة قبل نشر المادة");
+    assertAllowed((units.count ?? 0) > 0, "انشر وحدة واحدة على الأقل قبل نشر المادة");
+    const { error } = await client.from("subjects").update({ status: "published" }).eq("id", subjectId);
+    if (error) throw error;
+  }
+  async publishSubjectUnit(_identity: Identity, unitId: string): Promise<void> {
+    const client = await this.client();
+    const { count, error: countError } = await client.from("lessons").select("id", { count: "exact", head: true }).eq("unit_id", unitId).eq("status", "published");
+    if (countError) throw countError;
+    assertAllowed((count ?? 0) > 0, "انشر درسًا واحدًا على الأقل قبل نشر الوحدة");
+    const { error } = await client.from("subject_units").update({ status: "published" }).eq("id", unitId);
+    if (error) throw error;
+  }
+  async publishUnitLesson(_identity: Identity, lessonId: string): Promise<void> { const client = await this.client(); const { error } = await client.from("lessons").update({ status: "published", published_at: new Date().toISOString() }).eq("id", lessonId); if (error) throw error; }
+  async completeLearningLesson(identity: Identity, lessonId: string): Promise<void> { assertAllowed(identity.role === "student"); const client = await this.client(); const { data: lesson, error: lessonError } = await client.from("lessons").select("subject_id,status").eq("id", lessonId).single(); if (lessonError) throw lessonError; assertAllowed(String((lesson as Row).status) === "published"); const { error } = await client.from("learning_progress").upsert({ student_id: identity.userId, subject_id: String((lesson as Row).subject_id), lesson_id: lessonId, completed_at: new Date().toISOString() }, { onConflict: "student_id,lesson_id" }); if (error) throw error; }
+
   async enrollStudentByReference(_identity: Identity, input: { groupId: string; enrollmentReference: string }): Promise<{ studentId: string; displayName: string }> {
     const client = await this.client();
     const { data, error } = await client.rpc("enroll_student_by_reference_v1", {
@@ -253,19 +279,22 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     const { data: subject, error: subjectError } = await client.from("subjects").select("id").eq("id", subjectId).single();
     if (subjectError) throw subjectError;
     assertFound(subject);
-    const [unitsResult, lessonsResult] = await Promise.all([
+    const [unitsResult, lessonsResult, progressResult] = await Promise.all([
       client.from("subject_units").select("id,display_order").eq("subject_id", subjectId).order("display_order"),
       client.from("lessons").select("id,unit_id,status,display_order").eq("subject_id", subjectId),
+      client.from("learning_progress").select("lesson_id").eq("student_id", _identity.userId).eq("subject_id", subjectId),
     ]);
     if (unitsResult.error) throw unitsResult.error;
     if (lessonsResult.error) throw lessonsResult.error;
+    if (progressResult.error) throw progressResult.error;
     const unitOrder = new Map(((unitsResult.data ?? []) as Row[]).map((row) => [String(row.id), Number(row.display_order)]));
+    const completed = new Set(((progressResult.data ?? []) as Row[]).map((row) => String(row.lesson_id)));
     return ((lessonsResult.data ?? []) as Row[])
       .sort((left, right) => (unitOrder.get(String(left.unit_id)) ?? 0) - (unitOrder.get(String(right.unit_id)) ?? 0) ||
         Number(left.display_order) - Number(right.display_order))
       .map((row, index) => ({
         lessonId: String(row.id), unitId: String(row.unit_id), order: index + 1,
-        state: String(row.status) === "published" ? "available" : "locked",
+        state: completed.has(String(row.id)) ? "completed" : String(row.status) === "published" ? "available" : "locked",
       }));
   }
 }

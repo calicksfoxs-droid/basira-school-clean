@@ -49,7 +49,7 @@ export async function submitQuizFormAction(formData: FormData) {
       if (!(value instanceof File) || value.size === 0) throw new Error("ارفع ملف الإجابة المطلوب");
       if (!fileTypes.has(value.type) || value.size > env.MAX_SUBMISSION_UPLOAD_MB * 1024 * 1024) throw new Error("ملف الإجابة غير مدعوم أو أكبر من الحد المسموح");
       const extension = value.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "") || "bin";
-      const storagePath = `${quiz.group.id}/${quiz.quiz.id}/${identity.userId}/${submissionId}/${randomUUID()}.${extension}`;
+      const storagePath = `${quiz.group?.id ?? quiz.lesson.subjectId}/${quiz.quiz.id}/${identity.userId}/${submissionId}/${randomUUID()}.${extension}`;
       const bytes = new Uint8Array(await value.arrayBuffer());
       if (isDemoBackend) {
         const fullPath = path.join(demoUploadDir(), storagePath);

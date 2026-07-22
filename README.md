@@ -1,20 +1,20 @@
-# بصيرة المدرسة — Basira School Platform
+# بصيرة — منصة تعليمية عربية
 
-منصة عربية خاصة وبسيطة للمدير والمعلم والطالب. تجمع الحسابات، المجموعات، المواد، الدروس، الفيديوهات، الملازم، الاختبارات والتصحيح داخل واجهات منفصلة حسب الدور.
+منتج تعليمي عربي خفيف للمدير والمعلمين المستقلين والطلاب. ينشئ كل معلم مواده ومجموعاته، ويسجّل الطالب في المجموعة المناسبة بمعرّف انضمام منفصل عن رمز الدخول. لا يرى الطالب إلا المواد والمجموعات التي سُجّل فيها.
 
 ## ما الذي يعمل؟
 
-- دخول مغلق برمز `BSR-XXXX-XXXXXXXX`، بدون تسجيل عام.
-- مدير: الحسابات، جميع المجموعات، نقل الملكية، الإعلانات والمتابعة.
-- معلم: مجموعاته وطلابه ومواده ودروسه وملفاته واختباراته وتصحيحه فقط.
-- طالب: المجموعات المسندة إليه، الدروس المنشورة، ملفاته، اختباراته ونتائجه فقط.
-- فيديو MP4/WebM حقيقي، ملزمة PDF، وإجابة ملف/صورة.
-- MCQ وصح/خطأ بتصحيح تلقائي، ومقالي نص/ملف بتصحيح يدوي.
-- إجابات الاختبار الصحيحة معزولة ولا تظهر للطالب إلا بعد إصدار النتيجة.
-- إعلان دوّار كل خمس ثوانٍ مع تحكم يدوي ودعم reduced motion.
-- Demo backend محلي فوري، وSupabase backend للإنتاج مع Auth/Storage/RLS.
+- لوحات مستقلة للمدير والمعلم والطالب، بواجهة RTL متجاوبة وثيم فاتح/داكن.
+- المادة هي الجذر، وتحتها مجموعات ووحدات ودروس مرتبة.
+- إعلان بصري داخل المادة، وحالات مسودة/منشور مع شروط نشر تمنع المحتوى الفارغ.
+- محرر درس يدعم فيديو MP4/WebM وملزمة PDF ودرسًا مباشرًا أو أجزاء.
+- اختبارات اختيار من متعدد، صح/خطأ، مقالي نصي وملف، مع تصحيح آلي ويدوي.
+- رحلة تعلم للطالب، فتح تدريجي للدروس، وتسجيل تقدم حقيقي.
+- رموز دخول مغلقة، ومعرّف انضمام مستقل لا يُخزّن كاملًا.
+- كشف رمز الدخول الجديد مرة واحدة فقط داخل cookie مشفّر و`no-store`.
+- Demo محلي دائم للاختبار السريع، وSupabase/PostgreSQL للإنتاج مع RLS وStorage خاص.
 
-## تشغيل العرض المحلي
+## التشغيل المحلي
 
 المتطلبات: Node.js 20 أو أحدث.
 
@@ -25,9 +25,9 @@ npm run reset:demo
 npm run dev
 ```
 
-افتح: `http://localhost:3000/login`
+افتح `http://localhost:3000/login`.
 
-رموز العرض:
+رموز العرض المحلية:
 
 ```text
 المدير:  BSR-ADMN-DEMO2026
@@ -35,13 +35,13 @@ npm run dev
 الطالب:  BSR-STDN-DEMO2026
 ```
 
-الـDemo يحفظ بياناته في `.data/`، ويمكن إعادته للحالة الأصلية عبر:
+لإعادة بيانات العرض:
 
 ```powershell
 npm run reset:demo
 ```
 
-## الاختبارات
+## التحقق
 
 ```powershell
 npm run lint
@@ -52,65 +52,39 @@ npm run verify:static
 npm run build
 ```
 
-البوابة الكاملة:
+أو البوابة الكاملة:
 
 ```powershell
 npm run verify:release
 ```
 
-## إعداد Supabase
+آخر نتيجة مثبتة: ESLint ناجح، TypeScript ناجح، Vitest ‏59/59، Playwright ‏25 ناجحًا وواحد تخطٍ مقصود، والتحقق الثابت والبناء الإنتاجي ناجحان.
 
-1. أنشئ مشروع Supabase منفصلًا للـstaging.
-2. ضع قيم البيئة في `.env.local` أو Render Environment، ولا تلتزم بها في Git.
-3. طبّق migration:
+## إعداد الإنتاج على Supabase
 
-```powershell
-npx supabase login
-npx supabase link --project-ref YOUR_PROJECT_REF
-npx supabase db push
-```
-
-4. أنشئ المدير الأول:
+1. أنشئ مشروع staging منفصلًا.
+2. انسخ `.env.example` إلى ملف بيئة سري، واضبط `BASIRA_BACKEND=supabase`.
+3. أنشئ `BASIRA_APP_SECRET` عشوائيًا بطول 32 حرفًا على الأقل؛ التطبيق يرفض القيمة الافتراضية في الإنتاج.
+4. طبّق جميع الملفات داخل `supabase/migrations` بالترتيب.
+5. أنشئ المدير الأول:
 
 ```powershell
 npm run seed:supabase
 ```
 
-لإعادة رمز المدير الموجود:
+لا ترفع `.env.local` أو Service Role Key أو أي رمز دخول كامل إلى Git.
 
-```powershell
-npm run seed:supabase:reset-admin
-```
-
-الرمز الكامل يظهر مرة واحدة فقط. لا تحفظه في التقارير أو Git.
-
-## نشر Render
-
-- استخدم `render.yaml` أو أنشئ Web Service يدويًا.
-- Build: `npm ci && npm run build`
-- Start: `npm start`
-- Health: `/api/health`
-- اضبط `BASIRA_BACKEND=supabase` وقيم Supabase السرية على Render فقط.
-
-التفاصيل: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
-
-## بنية المشروع
+## البنية
 
 ```text
-src/app              Next.js routes and API routes
-src/actions          Server Actions
-src/components       UI and domain components
-src/domain           Models, schemas, grading rules
-src/lib/auth         Demo/Supabase authentication
-src/lib/data         Backend contract + demo/Supabase adapters
-src/lib/supabase     SSR/admin/storage clients
-supabase/migrations  Complete production schema + RLS + Storage
-scripts              Seed/reset/release checks
+src/app              الصفحات وواجهات API
+src/actions          عمليات الخادم
+src/components       الواجهة ومكوّنات المنتج
+src/domain           النماذج وقواعد التحقق والتصحيح
+src/lib/core         المواد المستقلة والمجموعات والرحلة والتفضيلات
+src/lib/data         المحتوى والاختبارات وموصلا Demo/Supabase
+supabase/migrations  PostgreSQL وRLS وStorage والتقدم
+test/e2e             اختبارات المتصفح Desktop/Mobile
 ```
 
-راجع:
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- [`docs/SECURITY.md`](docs/SECURITY.md)
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
-- [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md)
+راجع [تقرير الاختبارات](docs/TEST_REPORT.md)، [الأمان](docs/SECURITY.md)، [النشر](docs/DEPLOYMENT.md)، و[تقرير التنفيذ النهائي](docs/FINAL_IMPLEMENTATION_REPORT.md).

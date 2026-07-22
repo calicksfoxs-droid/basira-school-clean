@@ -21,6 +21,10 @@ export interface LearningCoreStore {
   createSubjectGroup(identity: Identity, input: { subjectId: string; name: string; description?: string }): Promise<SubjectGroup>;
   createSubjectUnit(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<SubjectUnit>;
   createUnitLesson(identity: Identity, input: { unitId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<UnitLesson>;
+  publishLearningSubject(identity: Identity, subjectId: string): Promise<void>;
+  publishSubjectUnit(identity: Identity, unitId: string): Promise<void>;
+  publishUnitLesson(identity: Identity, lessonId: string): Promise<void>;
+  completeLearningLesson(identity: Identity, lessonId: string): Promise<void>;
   enrollStudentByReference(identity: Identity, input: { groupId: string; enrollmentReference: string }): Promise<{ studentId: string; displayName: string }>;
   getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference>;
   rotateEnrollmentReference(identity: Identity, studentId: string): Promise<RevealedStudentEnrollmentReference>;

@@ -44,10 +44,10 @@ function groupFrom(row: Record<string, unknown>): Group {
   return { id: String(row.id), name: String(row.name), ownerTeacherId: String(row.owner_teacher_id), status: String(row.status) as Group["status"], description: row.description ? String(row.description) : undefined, createdBy: String(row.created_by), createdAt: String(row.created_at) };
 }
 function subjectFrom(row: Record<string, unknown>): Subject {
-  return { id: String(row.id), groupId: String(row.group_id), title: String(row.title), description: row.description ? String(row.description) : undefined, displayOrder: Number(row.display_order), status: String(row.status) as Subject["status"], createdAt: String(row.created_at) };
+  return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, ownerTeacherId: row.owner_teacher_id ? String(row.owner_teacher_id) : undefined, title: String(row.title), description: row.description ? String(row.description) : undefined, displayOrder: Number(row.display_order), status: String(row.status) as Subject["status"], createdAt: String(row.created_at) };
 }
 function lessonFrom(row: Record<string, unknown>): Lesson {
-  return { id: String(row.id), subjectId: String(row.subject_id), title: String(row.title), description: row.description ? String(row.description) : undefined, displayOrder: Number(row.display_order), structureMode: String(row.structure_mode) as Lesson["structureMode"], status: String(row.status) as Lesson["status"], publishedAt: row.published_at ? String(row.published_at) : undefined, createdAt: String(row.created_at) };
+  return { id: String(row.id), subjectId: String(row.subject_id), unitId: row.unit_id ? String(row.unit_id) : undefined, title: String(row.title), description: row.description ? String(row.description) : undefined, displayOrder: Number(row.display_order), structureMode: String(row.structure_mode) as Lesson["structureMode"], status: String(row.status) as Lesson["status"], publishedAt: row.published_at ? String(row.published_at) : undefined, createdAt: String(row.created_at) };
 }
 function assetFrom(row: Record<string, unknown>): Asset {
   return { id: String(row.id), kind: String(row.kind) as Asset["kind"], lessonId: row.lesson_id ? String(row.lesson_id) : undefined, lessonPartId: row.lesson_part_id ? String(row.lesson_part_id) : undefined, submissionId: row.submission_id ? String(row.submission_id) : undefined, ownerStudentId: row.owner_student_id ? String(row.owner_student_id) : undefined, title: String(row.title), storagePath: String(row.storage_path), originalFilename: String(row.original_filename), mimeType: String(row.mime_type), sizeBytes: Number(row.size_bytes), state: String(row.state) as Asset["state"], createdAt: String(row.created_at) };
@@ -310,10 +310,12 @@ export class SupabaseStore implements BasiraStore {
     const { data: subjectData, error } = await client.from("subjects").select("*").eq("id", subjectId).single();
     if (error) throw error;
     const subject = subjectFrom(subjectData as Record<string, unknown>);
-    const { data: groupData, error: groupError } = await client.from("groups").select("*").eq("id", subject.groupId).single();
+    const groupResult = subject.groupId
+      ? await client.from("groups").select("*").eq("id", subject.groupId).single()
+      : { data: null, error: null };
     const { data: lessonsData, error: lessonError } = await client.from("lessons").select("*").eq("subject_id", subjectId).order("display_order");
-    if (groupError || lessonError) throw groupError ?? lessonError;
-    return { subject, group: groupFrom(groupData as Record<string, unknown>), lessons: ((lessonsData ?? []) as Array<Record<string, unknown>>).map(lessonFrom) };
+    if (groupResult.error || lessonError) throw groupResult.error ?? lessonError;
+    return { subject, group: groupResult.data ? groupFrom(groupResult.data as Record<string, unknown>) : undefined, lessons: ((lessonsData ?? []) as Array<Record<string, unknown>>).map(lessonFrom) };
   }
 
   async createLesson(identity: Identity, input: { subjectId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<Lesson> {

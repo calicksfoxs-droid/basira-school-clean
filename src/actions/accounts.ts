@@ -46,7 +46,9 @@ export async function createStudentAction(formData: FormData) {
 export async function resetAccessCodeAction(formData: FormData) {
   const path = returnPath(formData, "/app");
   try {
-    const identity = await requireRole("admin", "teacher");
+    // Resetting a credential invalidates access globally. Keep this operation at
+    // the platform-admin boundary; teachers manage enrolment, not identities.
+    const identity = await requireRole("admin");
     const userId = formText(formData, "userId");
     const created = await (await getStore()).resetAccessCode(identity, userId);
     await setAccessCodeFlash(created.code, created.user.displayName);
@@ -60,7 +62,8 @@ export async function resetAccessCodeAction(formData: FormData) {
 export async function disableUserAction(formData: FormData) {
   const path = returnPath(formData, "/app");
   try {
-    const identity = await requireRole("admin", "teacher");
+    // Disabling a shared account affects every teacher who enrolled the student.
+    const identity = await requireRole("admin");
     await (await getStore()).disableUser(identity, formText(formData, "userId"));
     revalidatePath(path);
   } catch (error) {

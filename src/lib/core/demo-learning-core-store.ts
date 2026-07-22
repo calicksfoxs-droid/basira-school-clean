@@ -14,7 +14,7 @@ import type {
   UserPreferences,
 } from "@/domain/core-models";
 import { AppError, assertAllowed, assertFound } from "@/lib/data/errors";
-import { mutateDemoDatabase } from "@/lib/demo/demo-db";
+import { mutateDemoDatabase, readDemoDatabase } from "@/lib/demo/demo-db";
 import {
   fingerprintEnrollmentReference,
   generateEnrollmentReference,
@@ -58,29 +58,32 @@ function preferenceFor(database: DemoDatabase, userId: string): UserPreferences 
 
 export class DemoLearningCoreStore implements LearningCoreStore {
   async listLearningSubjects(identity: Identity): Promise<LearningSubject[]> {
-    return mutateDemoDatabase((database) => database.learningSubjects
+    const database = await readDemoDatabase();
+    return database.learningSubjects
       .filter((subject) => canReadSubject(database, identity, subject))
-      .sort((left, right) => left.displayOrder - right.displayOrder));
+      .sort((left, right) => left.displayOrder - right.displayOrder);
   }
 
   async getLearningSubject(identity: Identity, subjectId: string): Promise<LearningSubjectDetails> {
-    return mutateDemoDatabase((database) => {
-      const subject = assertFound(database.learningSubjects.find((candidate) => candidate.id === subjectId));
-      assertAllowed(canReadSubject(database, identity, subject));
-      const studentGroupIds = identity.role === "student"
-        ? new Set(database.learningMemberships
-          .filter((membership) => membership.studentId === identity.userId && membership.status === "active")
-          .map((membership) => membership.groupId))
-        : undefined;
-      return {
-        subject,
-        groups: database.learningGroups.filter((group) => group.subjectId === subjectId &&
-          (!studentGroupIds || (group.status === "active" && studentGroupIds.has(group.id)))),
-        units: database.learningUnits.filter((unit) => unit.subjectId === subjectId &&
-          (identity.role !== "student" || unit.status === "published"))
-          .sort((left, right) => left.displayOrder - right.displayOrder),
-      };
-    });
+    const database = await readDemoDatabase();
+    const subject = assertFound(database.learningSubjects.find((candidate) => candidate.id === subjectId));
+    assertAllowed(canReadSubject(database, identity, subject));
+    const studentGroupIds = identity.role === "student"
+      ? new Set(database.learningMemberships
+        .filter((membership) => membership.studentId === identity.userId && membership.status === "active")
+        .map((membership) => membership.groupId))
+      : undefined;
+    return {
+      subject,
+      groups: database.learningGroups.filter((group) => group.subjectId === subjectId &&
+        (!studentGroupIds || (group.status === "active" && studentGroupIds.has(group.id)))),
+      units: database.learningUnits.filter((unit) => unit.subjectId === subjectId &&
+        (identity.role !== "student" || unit.status === "published"))
+        .sort((left, right) => left.displayOrder - right.displayOrder),
+      lessons: database.learningLessons.filter((lesson) => lesson.subjectId === subjectId &&
+        (identity.role !== "student" || lesson.status === "published"))
+        .sort((left, right) => left.displayOrder - right.displayOrder),
+    };
   }
 
   async createLearningSubject(identity: Identity, input: { title: string; description?: string }): Promise<LearningSubject> {
@@ -94,6 +97,17 @@ export class DemoLearningCoreStore implements LearningCoreStore {
         createdAt: timestamp, updatedAt: timestamp,
       };
       database.learningSubjects.push(subject);
+      // Demo persistence mirrors Supabase, where Learning Core and lesson
+      // content share the same subjects table.
+      database.subjects.push({
+        id: subject.id,
+        ownerTeacherId: subject.teacherId,
+        title: subject.title,
+        description: subject.description,
+        displayOrder: subject.displayOrder,
+        status: subject.status,
+        createdAt: subject.createdAt,
+      });
       return subject;
     });
   }
@@ -147,7 +161,65 @@ export class DemoLearningCoreStore implements LearningCoreStore {
         structureMode: input.structureMode, status: "draft", createdAt: now(),
       };
       database.learningLessons.push(lesson);
+      database.lessons.push({
+        id: lesson.id,
+        subjectId: lesson.subjectId,
+        unitId: lesson.unitId,
+        title: lesson.title,
+        description: lesson.description,
+        displayOrder: lesson.displayOrder,
+        structureMode: lesson.structureMode,
+        status: lesson.status,
+        createdAt: lesson.createdAt,
+      });
       return lesson;
+    });
+  }
+
+  async publishLearningSubject(identity: Identity, subjectId: string): Promise<void> {
+    await mutateDemoDatabase((database) => {
+      const subject = ownSubject(database, identity, subjectId);
+      assertAllowed(database.learningGroups.some((group) => group.subjectId === subjectId && group.status === "active"), "أضف مجموعة نشطة قبل نشر المادة");
+      assertAllowed(database.learningUnits.some((unit) => unit.subjectId === subjectId && unit.status === "published"), "انشر وحدة واحدة على الأقل قبل نشر المادة");
+      subject.status = "published";
+      subject.updatedAt = now();
+      const contentSubject = database.subjects.find((item) => item.id === subjectId);
+      if (contentSubject) contentSubject.status = "published";
+    });
+  }
+
+  async publishSubjectUnit(identity: Identity, unitId: string): Promise<void> {
+    await mutateDemoDatabase((database) => {
+      const unit = assertFound(database.learningUnits.find((item) => item.id === unitId));
+      ownSubject(database, identity, unit.subjectId);
+      assertAllowed(database.learningLessons.some((lesson) => lesson.unitId === unitId && lesson.status === "published"), "انشر درسًا واحدًا على الأقل قبل نشر الوحدة");
+      unit.status = "published";
+    });
+  }
+
+  async publishUnitLesson(identity: Identity, lessonId: string): Promise<void> {
+    await mutateDemoDatabase((database) => {
+      const lesson = assertFound(database.learningLessons.find((item) => item.id === lessonId));
+      ownSubject(database, identity, lesson.subjectId);
+      lesson.status = "published";
+      lesson.publishedAt = now();
+      const contentLesson = database.lessons.find((item) => item.id === lessonId);
+      if (contentLesson) {
+        contentLesson.status = "published";
+        contentLesson.publishedAt = lesson.publishedAt;
+      }
+    });
+  }
+
+  async completeLearningLesson(identity: Identity, lessonId: string): Promise<void> {
+    assertAllowed(identity.role === "student");
+    await mutateDemoDatabase((database) => {
+      const lesson = assertFound(database.learningLessons.find((item) => item.id === lessonId && item.status === "published"));
+      const subject = assertFound(database.learningSubjects.find((item) => item.id === lesson.subjectId));
+      assertAllowed(canReadSubject(database, identity, subject));
+      const existing = database.learningProgress.find((item) => item.studentId === identity.userId && item.lessonId === lessonId);
+      if (existing) existing.completedAt = now();
+      else database.learningProgress.push({ studentId: identity.userId, subjectId: lesson.subjectId, lessonId, completedAt: now() });
     });
   }
 
@@ -180,11 +252,10 @@ export class DemoLearningCoreStore implements LearningCoreStore {
 
   async getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference> {
     assertAllowed(identity.role === "student");
-    return mutateDemoDatabase((database) => {
-      const reference = assertFound(database.learningEnrollmentReferences.find((candidate) =>
-        candidate.studentId === identity.userId && !candidate.revokedAt));
-      return { studentId: reference.studentId, maskedReference: reference.maskedReference, rotatedAt: reference.rotatedAt };
-    });
+    const database = await readDemoDatabase();
+    const reference = assertFound(database.learningEnrollmentReferences.find((candidate) =>
+      candidate.studentId === identity.userId && !candidate.revokedAt));
+    return { studentId: reference.studentId, maskedReference: reference.maskedReference, rotatedAt: reference.rotatedAt };
   }
 
   async rotateEnrollmentReference(identity: Identity, studentId: string): Promise<RevealedStudentEnrollmentReference> {
@@ -206,7 +277,8 @@ export class DemoLearningCoreStore implements LearningCoreStore {
 
   async getPlatformSettings(identity: Identity): Promise<PlatformSettings> {
     assertAllowed(identity.status === "active");
-    return mutateDemoDatabase((database) => ({ ...database.platformSettings }));
+    const database = await readDemoDatabase();
+    return { ...database.platformSettings };
   }
 
   async updatePlatformSettings(identity: Identity, input: { platformName: string; timezone: string; maintenanceMessage?: string }): Promise<PlatformSettings> {
@@ -222,7 +294,11 @@ export class DemoLearningCoreStore implements LearningCoreStore {
   }
 
   async getUserPreferences(identity: Identity): Promise<UserPreferences> {
-    return mutateDemoDatabase((database) => ({ ...preferenceFor(database, identity.userId) }));
+    const database = await readDemoDatabase();
+    const preference = database.userPreferences.find((candidate) => candidate.userId === identity.userId);
+    return preference ? { ...preference } : {
+      userId: identity.userId, theme: "system", reducedMotion: false, locale: "ar", updatedAt: now(),
+    };
   }
 
   async updateUserPreferences(identity: Identity, input: { theme: "light" | "dark" | "system"; reducedMotion: boolean; locale: "ar" }): Promise<UserPreferences> {
@@ -234,21 +310,24 @@ export class DemoLearningCoreStore implements LearningCoreStore {
   }
 
   async getLearningJourney(identity: Identity, subjectId: string): Promise<LearningJourneyNode[]> {
-    return mutateDemoDatabase((database) => {
-      const subject = assertFound(database.learningSubjects.find((candidate) => candidate.id === subjectId));
-      assertAllowed(canReadSubject(database, identity, subject));
-      const unitOrder = new Map(database.learningUnits
-        .filter((unit) => unit.subjectId === subjectId)
-        .map((unit) => [unit.id, unit.displayOrder]));
-      return database.learningLessons
-        .filter((lesson) => lesson.subjectId === subjectId &&
-          (identity.role !== "student" || lesson.status === "published"))
-        .sort((left, right) => (unitOrder.get(left.unitId) ?? 0) - (unitOrder.get(right.unitId) ?? 0) ||
-          left.displayOrder - right.displayOrder)
-        .map((lesson, index) => ({
-          lessonId: lesson.id, unitId: lesson.unitId, order: index + 1,
-          state: lesson.status === "published" ? "available" : "locked",
-        }));
-    });
+    const database = await readDemoDatabase();
+    const subject = assertFound(database.learningSubjects.find((candidate) => candidate.id === subjectId));
+    assertAllowed(canReadSubject(database, identity, subject));
+    const unitOrder = new Map(database.learningUnits
+      .filter((unit) => unit.subjectId === subjectId && (identity.role !== "student" || unit.status === "published"))
+      .map((unit) => [unit.id, unit.displayOrder]));
+    const completed = new Set(database.learningProgress.filter((item) => item.studentId === identity.userId && item.subjectId === subjectId).map((item) => item.lessonId));
+    let locked = false;
+    return database.learningLessons
+      .filter((lesson) => lesson.subjectId === subjectId && unitOrder.has(lesson.unitId) &&
+        (identity.role !== "student" || lesson.status === "published"))
+      .sort((left, right) => (unitOrder.get(left.unitId) ?? 0) - (unitOrder.get(right.unitId) ?? 0) ||
+        left.displayOrder - right.displayOrder)
+      .map((lesson, index) => {
+        const isCompleted = completed.has(lesson.id);
+        const state: LearningJourneyNode["state"] = isCompleted ? "completed" : locked ? "locked" : "available";
+        if (!isCompleted) locked = true;
+        return { lessonId: lesson.id, unitId: lesson.unitId, order: index + 1, state };
+      });
   }
 }

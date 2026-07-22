@@ -1,0 +1,84 @@
+{
+  "runId": "basira-ds-v1-20260722",
+  "fileKey": "8flNgjOSrMCH1hjZiFG3et",
+  "fileUrl": "https://www.figma.com/design/8flNgjOSrMCH1hjZiFG3et",
+  "currentPhase": "FIGMA_FINAL_HANDOFF_COMPLETE",
+  "planConstraint": "Starter plan: one mode per collection; themes are separate semantic collections",
+  "phases": {
+    "P0": { "status": "completed", "items": ["P0.a", "P0.b", "P0.c", "P0.d", "P0.e", "P0.f"] },
+    "P1": { "status": "completed", "items": ["P1.a", "P1.b", "P1.c", "P1.d", "P1.e"], "validation": "PASS_PHASE_1" },
+    "P2": { "status": "completed", "coverNodeId": "7:2", "foundationsNodeId": "8:3" },
+    "P3": { "status": "completed", "componentsPageId": "10:2", "componentsBoardId": "10:3", "validationScreenshot": ".figma/components.png" },
+    "P4": { "status": "completed", "requires": "Desktop screens complete" },
+    "P5": { "status": "completed", "validation": "Mobile screens, overlay states, motion and accessibility spec reviewed" },
+    "P6": { "status": "completed", "validation": "Primary cover rebuilt and visually reviewed; four production image assets embedded; two alternate cover directions added" },
+    "P7": { "status": "completed", "validation": "Final QA completed; prototype flows, starting points, and delivery handoff board added and visually reviewed" }
+  },
+  "collections": {
+    "primitives": "VariableCollectionId:5:2",
+    "paper": "VariableCollectionId:5:3",
+    "observatory": "VariableCollectionId:5:4",
+    "spectrum": "VariableCollectionId:5:5",
+    "layout": "VariableCollectionId:5:6",
+    "typography": "VariableCollectionId:5:7"
+  },
+  "styles": { "textCount": 11, "effectCount": 4 },
+  "pages": {},
+  "components": {
+    "Button": "17:2",
+    "Badge": "17:4",
+    "Input": "17:6",
+    "Tab": "17:8",
+    "Toggle": "17:10",
+    "NavItem": "17:12",
+    "SubjectCard": "17:14"
+  },
+  "screens": {
+    "adminDashboard": "20:2",
+    "teacherSubjects": "20:61",
+    "teacherSubjectDetail": "20:122",
+    "studentHome": "22:2",
+    "studentSubject": "22:59",
+    "learningJourney": "22:114",
+    "mobileStudentHome": "26:2",
+    "mobileStudentSubject": "26:39",
+    "mobileTeacherSubjects": "26:86",
+    "mobileLearningJourney": "26:126",
+    "mobileAddSubject": "26:150",
+    "mobileEmpty": "26:175",
+    "mobileLoading": "26:198",
+    "mobileError": "26:228"
+  },
+  "states": {
+    "lessonDrawer": "27:2",
+    "destructiveConfirmation": "27:26",
+    "lessonSuccess": "27:47",
+    "feedbackSystem": "27:75",
+    "motionAccessibilitySpec": "27:104"
+  },
+  "cover": {
+    "primary": "7:2",
+    "paperLightAlternative": "30:25",
+    "spectrumScienceAlternative": "30:39",
+    "visualAssetBoard": "30:54"
+  },
+  "imageAssets": {
+    "scienceHero": "72a6558946af672e8469155e80f34e35efaf3b2e",
+    "arabicHero": "02ad85105478474252ec01dabb6418bec43d4503",
+    "emptyState": "1059fc8419aa2746e8490e00a3b88159ed6e32f3",
+    "achievement": "b442d0f9e7b66fb708db61232a47641fe002d411"
+  },
+  "prototype": {
+    "handoffBoard": "35:20",
+    "startingPoints": ["26:2", "26:86", "20:2"],
+    "linkedTransitions": 9,
+    "reviewStatus": "passed"
+  },
+  "validationScreenshots": [
+    ".figma/mobile-home.png",
+    ".figma/mobile-journey.png",
+    ".figma/mobile-success.png",
+    ".figma/motion-a11y.png"
+  ],
+  "errors": []
+}

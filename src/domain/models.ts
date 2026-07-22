@@ -69,22 +69,25 @@ export interface PrivateStudentRecord {
 
 export interface Subject {
   id: string;
-  groupId: string;
+  /** Legacy subjects belong directly to one group; Learning Core subjects are teacher-owned roots. */
+  groupId?: string;
+  ownerTeacherId?: string;
   title: string;
   description?: string;
   displayOrder: number;
-  status: "active" | "archived";
+  status: "active" | "draft" | "published" | "archived";
   createdAt: string;
 }
 
 export interface Lesson {
   id: string;
   subjectId: string;
+  unitId?: string;
   title: string;
   description?: string;
   displayOrder: number;
   structureMode: StructureMode;
-  status: ContentState;
+  status: ContentState | "archived";
   publishedAt?: string;
   createdAt: string;
 }
@@ -208,6 +211,7 @@ export interface DemoDatabase {
   learningMemberships: import("./core-models").SubjectGroupMembership[];
   learningUnits: import("./core-models").SubjectUnit[];
   learningLessons: import("./core-models").UnitLesson[];
+  learningProgress: import("./core-models").LearningProgress[];
   learningEnrollmentReferences: import("./core-models").StoredStudentEnrollmentReference[];
   platformSettings: import("./core-models").PlatformSettings;
   userPreferences: import("./core-models").UserPreferences[];
@@ -232,14 +236,14 @@ export interface GroupDetails {
 
 export interface SubjectDetails {
   subject: Subject;
-  group: Group;
+  group?: Group;
   lessons: Lesson[];
 }
 
 export interface LessonDetails {
   lesson: Lesson;
   subject: Subject;
-  group: Group;
+  group?: Group;
   parts: LessonPart[];
   assets: Asset[];
   quiz?: Quiz;
@@ -250,7 +254,7 @@ export interface QuizDetails {
   quiz: Quiz;
   questions: Question[];
   lesson: Lesson;
-  group: Group;
+  group?: Group;
   existingSubmission?: Submission;
   answers?: Answer[];
 }

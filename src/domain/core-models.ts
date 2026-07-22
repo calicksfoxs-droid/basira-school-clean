@@ -98,8 +98,16 @@ export interface LearningJourneyNode {
   state: "locked" | "available" | "completed";
 }
 
+export interface LearningProgress {
+  studentId: string;
+  subjectId: string;
+  lessonId: string;
+  completedAt: string;
+}
+
 export interface LearningSubjectDetails {
   subject: LearningSubject;
   groups: SubjectGroup[];
   units: SubjectUnit[];
+  lessons: UnitLesson[];
 }

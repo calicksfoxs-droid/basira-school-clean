@@ -5,6 +5,7 @@ import type {
   Announcement,
   Asset,
   DashboardSummary,
+  DemoDatabase,
   Group,
   GroupDetails,
   Identity,
@@ -32,6 +33,34 @@ function groupOwnedBy(identity: Identity, group: Group) {
   return identity.role === "admin" || (identity.role === "teacher" && group.ownerTeacherId === identity.userId);
 }
 
+function groupForSubject(database: DemoDatabase, subject: Subject) {
+  return subject.groupId ? database.groups.find((group) => group.id === subject.groupId) : undefined;
+}
+
+function subjectOwnerId(database: DemoDatabase, subject: Subject) {
+  return subject.ownerTeacherId ?? groupForSubject(database, subject)?.ownerTeacherId ??
+    database.learningSubjects.find((item) => item.id === subject.id)?.teacherId;
+}
+
+function canManageSubject(database: DemoDatabase, identity: Identity, subject: Subject) {
+  return identity.role === "admin" ||
+    (identity.role === "teacher" && subjectOwnerId(database, subject) === identity.userId);
+}
+
+function canAccessSubject(database: DemoDatabase, identity: Identity, subject: Subject) {
+  if (canManageSubject(database, identity, subject)) return true;
+  if (identity.role !== "student") return false;
+  if (subject.groupId) {
+    return database.memberships.some((membership) => membership.groupId === subject.groupId &&
+      membership.studentId === identity.userId && membership.status === "active");
+  }
+  const activeGroups = new Set(database.learningGroups
+    .filter((group) => group.subjectId === subject.id && group.status === "active")
+    .map((group) => group.id));
+  return database.learningMemberships.some((membership) => membership.studentId === identity.userId &&
+    membership.status === "active" && activeGroups.has(membership.groupId));
+}
+
 async function allowedGroups(identity: Identity) {
   const db = await readDemoDatabase();
   if (identity.role === "admin") return db.groups;
@@ -45,7 +74,7 @@ export class DemoStore implements BasiraStore {
     const db = await readDemoDatabase();
     const groups = await allowedGroups(identity);
     const groupIds = new Set(groups.map((g) => g.id));
-    const subjectIds = new Set(db.subjects.filter((s) => groupIds.has(s.groupId)).map((s) => s.id));
+    const subjectIds = new Set(db.subjects.filter((s) => Boolean(s.groupId && groupIds.has(s.groupId))).map((s) => s.id));
     const latestLessons = db.lessons
       .filter((l) => subjectIds.has(l.subjectId) && (identity.role !== "student" || l.status === "published"))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -233,16 +262,15 @@ export class DemoStore implements BasiraStore {
   async getSubject(identity: Identity, subjectId: string): Promise<SubjectDetails> {
     const db = await readDemoDatabase();
     const subject = assertFound(db.subjects.find((s) => s.id === subjectId));
-    const group = assertFound(db.groups.find((g) => g.id === subject.groupId));
-    assertAllowed((await allowedGroups(identity)).some((g) => g.id === group.id));
+    const group = groupForSubject(db, subject);
+    assertAllowed(canAccessSubject(db, identity, subject));
     return { subject, group, lessons: db.lessons.filter((l) => l.subjectId === subject.id && (identity.role !== "student" || l.status === "published")).sort((a, b) => a.displayOrder - b.displayOrder) };
   }
 
   async createLesson(identity: Identity, input: { subjectId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<Lesson> {
     return mutateDemoDatabase((db) => {
       const subject = assertFound(db.subjects.find((s) => s.id === input.subjectId));
-      const group = assertFound(db.groups.find((g) => g.id === subject.groupId));
-      assertAllowed(identity.role === "teacher" && group.ownerTeacherId === identity.userId);
+      assertAllowed(identity.role === "teacher" && canManageSubject(db, identity, subject));
       const lesson: Lesson = { id: randomUUID(), subjectId: subject.id, title: input.title, description: input.description, displayOrder: db.lessons.filter((l) => l.subjectId === subject.id).length + 1, structureMode: input.structureMode, status: "draft", createdAt: now() };
       db.lessons.push(lesson);
       return lesson;
@@ -253,8 +281,7 @@ export class DemoStore implements BasiraStore {
     return mutateDemoDatabase((db) => {
       const lesson = assertFound(db.lessons.find((item) => item.id === input.lessonId));
       const subject = assertFound(db.subjects.find((item) => item.id === lesson.subjectId));
-      const group = assertFound(db.groups.find((item) => item.id === subject.groupId));
-      assertAllowed(identity.role === "teacher" && group.ownerTeacherId === identity.userId);
+      assertAllowed(identity.role === "teacher" && canManageSubject(db, identity, subject));
       assertAllowed(lesson.structureMode === "parts", "هذا الدرس لا يستخدم الأجزاء");
       assertAllowed(lesson.status === "draft", "لا يمكن إضافة جزء بعد نشر الدرس");
       const part = { id: randomUUID(), lessonId: lesson.id, title: input.title, description: input.description, displayOrder: db.lessonParts.filter((item) => item.lessonId === lesson.id).length + 1, createdAt: now() };
@@ -267,8 +294,8 @@ export class DemoStore implements BasiraStore {
     const db = await readDemoDatabase();
     const lesson = assertFound(db.lessons.find((l) => l.id === lessonId));
     const subject = assertFound(db.subjects.find((s) => s.id === lesson.subjectId));
-    const group = assertFound(db.groups.find((g) => g.id === subject.groupId));
-    assertAllowed((await allowedGroups(identity)).some((g) => g.id === group.id));
+    const group = groupForSubject(db, subject);
+    assertAllowed(canAccessSubject(db, identity, subject));
     if (identity.role === "student") assertAllowed(lesson.status === "published");
     const parts = db.lessonParts.filter((p) => p.lessonId === lesson.id).sort((a, b) => a.displayOrder - b.displayOrder);
     const partIds = new Set(parts.map((p) => p.id));
@@ -282,8 +309,7 @@ export class DemoStore implements BasiraStore {
     await mutateDemoDatabase((db) => {
       const lesson = assertFound(db.lessons.find((l) => l.id === lessonId));
       const subject = assertFound(db.subjects.find((s) => s.id === lesson.subjectId));
-      const group = assertFound(db.groups.find((g) => g.id === subject.groupId));
-      assertAllowed(identity.role === "teacher" && group.ownerTeacherId === identity.userId);
+      assertAllowed(identity.role === "teacher" && canManageSubject(db, identity, subject));
       const parts = db.lessonParts.filter((p) => p.lessonId === lesson.id);
       const directHasContent = db.assets.some((a) => a.state === "ready" && a.lessonId === lesson.id) || db.quizzes.some((q) => q.lessonId === lesson.id && q.status === "published");
       if (lesson.structureMode === "direct") {
@@ -299,6 +325,11 @@ export class DemoStore implements BasiraStore {
       }
       lesson.status = "published";
       lesson.publishedAt = now();
+      const learningLesson = db.learningLessons.find((item) => item.id === lesson.id);
+      if (learningLesson) {
+        learningLesson.status = "published";
+        learningLesson.publishedAt = lesson.publishedAt;
+      }
     });
   }
 
@@ -309,8 +340,7 @@ export class DemoStore implements BasiraStore {
         const lessonId = input.lessonId ?? part?.lessonId;
         const lesson = assertFound(db.lessons.find((item) => item.id === lessonId));
         const subject = assertFound(db.subjects.find((item) => item.id === lesson.subjectId));
-        const group = assertFound(db.groups.find((item) => item.id === subject.groupId));
-        assertAllowed(identity.role === "teacher" && group.ownerTeacherId === identity.userId);
+        assertAllowed(identity.role === "teacher" && canManageSubject(db, identity, subject));
         assertAllowed((lesson.structureMode === "direct" && Boolean(input.lessonId) && !input.lessonPartId) || (lesson.structureMode === "parts" && Boolean(input.lessonPartId) && !input.lessonId), "بنية الدرس لا تطابق مكان الملف");
       } else if (input.submissionId) assertAllowed(identity.role === "student" && input.ownerStudentId === identity.userId);
       else throw new AppError("الملف غير مرتبط بعنصر صالح", "INVALID_PARENT");
@@ -332,7 +362,7 @@ export class DemoStore implements BasiraStore {
       const part = asset.lessonPartId ? assertFound(db.lessonParts.find((item) => item.id === asset.lessonPartId)) : undefined;
       const lesson = assertFound(db.lessons.find((item) => item.id === (asset.lessonId ?? part?.lessonId)));
       const subject = assertFound(db.subjects.find((s) => s.id === lesson.subjectId));
-      assertAllowed((await allowedGroups(identity)).some((g) => g.id === subject.groupId));
+      assertAllowed(canAccessSubject(db, identity, subject));
       if (identity.role === "student") assertAllowed(lesson.status === "published");
     }
     return asset;
@@ -343,8 +373,7 @@ export class DemoStore implements BasiraStore {
       const part = input.lessonPartId ? assertFound(db.lessonParts.find((item) => item.id === input.lessonPartId)) : undefined;
       const lesson = assertFound(db.lessons.find((item) => item.id === (input.lessonId ?? part?.lessonId)));
       const subject = assertFound(db.subjects.find((item) => item.id === lesson.subjectId));
-      const group = assertFound(db.groups.find((item) => item.id === subject.groupId));
-      assertAllowed(identity.role === "teacher" && group.ownerTeacherId === identity.userId);
+      assertAllowed(identity.role === "teacher" && canManageSubject(db, identity, subject));
       assertAllowed((lesson.structureMode === "direct" && Boolean(input.lessonId) && !input.lessonPartId) || (lesson.structureMode === "parts" && Boolean(input.lessonPartId) && !input.lessonId), "بنية الدرس لا تطابق مكان الاختبار");
       assertAllowed(!db.quizzes.some((quiz) => quiz.lessonId === input.lessonId && quiz.lessonPartId === input.lessonPartId), "يوجد اختبار بالفعل هنا");
       const quizId = randomUUID();
@@ -366,8 +395,8 @@ export class DemoStore implements BasiraStore {
     const part = quiz.lessonPartId ? assertFound(db.lessonParts.find((item) => item.id === quiz.lessonPartId)) : undefined;
     const lesson = assertFound(db.lessons.find((item) => item.id === (quiz.lessonId ?? part?.lessonId)));
     const subject = assertFound(db.subjects.find((s) => s.id === lesson.subjectId));
-    const group = assertFound(db.groups.find((g) => g.id === subject.groupId));
-    assertAllowed((await allowedGroups(identity)).some((g) => g.id === group.id));
+    const group = groupForSubject(db, subject);
+    assertAllowed(canAccessSubject(db, identity, subject));
     if (identity.role === "student") assertAllowed(quiz.status === "published" && lesson.status === "published");
     const existingSubmission = identity.role === "student" ? db.submissions.find((s) => s.quizId === quiz.id && s.studentId === identity.userId && s.status !== "void") : undefined;
     const reveal = identity.role !== "student" || existingSubmission?.status === "released";
@@ -387,7 +416,7 @@ export class DemoStore implements BasiraStore {
       const part = quiz.lessonPartId ? assertFound(db.lessonParts.find((item) => item.id === quiz.lessonPartId)) : undefined;
       const lesson = assertFound(db.lessons.find((item) => item.id === (quiz.lessonId ?? part?.lessonId) && item.status === "published"));
       const subject = assertFound(db.subjects.find((s) => s.id === lesson.subjectId));
-      assertAllowed(db.memberships.some((m) => m.groupId === subject.groupId && m.studentId === identity.userId && m.status === "active"));
+      assertAllowed(canAccessSubject(db, identity, subject));
       assertAllowed(!db.submissions.some((s) => s.quizId === quizId && s.studentId === identity.userId && s.status !== "void"), "تم تسليم هذا الاختبار بالفعل");
       const questions = db.questions.filter((q) => q.quizId === quiz.id);
       assertAllowed(inputs.length === questions.length && new Set(inputs.map((input) => input.questionId)).size === questions.length, "يجب إرسال إجابة واحدة لكل سؤال");

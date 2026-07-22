@@ -39,6 +39,24 @@ const serverSchema = z.object({
       });
     }
   }
+
+  // Fail in production if BASIRA_APP_SECRET is default or too short
+  if (process.env.NODE_ENV === "production") {
+    if (data.BASIRA_APP_SECRET === "basira-local-secret-change-before-production") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "BASIRA_APP_SECRET must not be the default value in production",
+        path: ["BASIRA_APP_SECRET"],
+      });
+    }
+    if (data.BASIRA_APP_SECRET.length < 32) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "BASIRA_APP_SECRET must be at least 32 characters long",
+        path: ["BASIRA_APP_SECRET"],
+      });
+    }
+  }
 });
 
 export function parseEnv(source: Record<string, string | undefined>) {

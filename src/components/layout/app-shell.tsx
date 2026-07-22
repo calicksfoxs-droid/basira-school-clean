@@ -1,5 +1,10 @@
-import { ClipboardCheck, GraduationCap, Home, Megaphone, School, Users } from "lucide-react";
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BookOpen, ClipboardCheck, Compass, GraduationCap, Home, Megaphone, School, Settings, Users } from "lucide-react";
 import type { Identity } from "@/domain/models";
+import type { UserPreferences } from "@/domain/core-models";
 import { Sidebar, type NavIconName, type NavItem } from "./sidebar";
 import { logoutAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -7,38 +12,49 @@ import { roleLabel } from "@/lib/utils";
 
 function nav(identity: Identity): NavItem[] {
   if (identity.role === "admin") return [
-    { href: "/app/admin", label: "الرئيسية", icon: "home" },
+    { href: "/app/admin", label: "الرئيسية", icon: "home", mobile: true },
+    { href: "/app/admin/subjects", label: "المواد", icon: "subjects", mobile: true },
     { href: "/app/admin/teachers", label: "المعلمون", icon: "teachers" },
-    { href: "/app/admin/students", label: "الطلاب", icon: "users" },
+    { href: "/app/admin/students", label: "الطلاب", icon: "users", mobile: true },
     { href: "/app/admin/groups", label: "المجموعات", icon: "school" },
     { href: "/app/admin/announcements", label: "الإعلانات", icon: "announcements" },
+    { href: "/app/settings", label: "الإعدادات", icon: "settings", mobile: true },
   ];
   if (identity.role === "teacher") return [
-    { href: "/app/teacher", label: "الرئيسية", icon: "home" },
+    { href: "/app/teacher", label: "الرئيسية", icon: "home", mobile: true },
+    { href: "/app/teacher/subjects", label: "موادي", icon: "subjects", mobile: true },
     { href: "/app/teacher/groups", label: "مجموعاتي", icon: "school" },
-    { href: "/app/teacher/students", label: "طلابي", icon: "users" },
+    { href: "/app/teacher/students", label: "طلابي", icon: "users", mobile: true },
     { href: "/app/teacher/submissions", label: "التصحيح", icon: "grading" },
     { href: "/app/teacher/announcements", label: "الإعلانات", icon: "announcements" },
+    { href: "/app/settings", label: "الإعدادات", icon: "settings", mobile: true },
   ];
   return [
-    { href: "/app/student", label: "الرئيسية", icon: "home" },
-    { href: "/app/student/groups", label: "فصولي", icon: "school" },
+    { href: "/app/student", label: "الرئيسية", icon: "home", mobile: true },
+    { href: "/app/student/subjects", label: "موادي", icon: "subjects", mobile: true },
+    { href: "/app/student/journey", label: "رحلتي", icon: "journey", mobile: true },
     { href: "/app/student/results", label: "نتائجي", icon: "grading" },
+    { href: "/app/settings", label: "حسابي", icon: "settings", mobile: true },
   ];
 }
 
-const mobileIcons = {
-  home: Home,
-  teachers: GraduationCap,
-  users: Users,
-  school: School,
-  announcements: Megaphone,
-  grading: ClipboardCheck,
-} satisfies Record<NavIconName, typeof Home>;
+const icons = { home: Home, teachers: GraduationCap, users: Users, school: School, announcements: Megaphone, grading: ClipboardCheck, subjects: BookOpen, journey: Compass, settings: Settings } satisfies Record<NavIconName, typeof Home>;
 
-export function AppShell({ identity, children }: { identity: Identity; children: React.ReactNode }) {
+export function AppShell({ identity, preferences, platformName, children }: { identity: Identity; preferences: UserPreferences; platformName: string; children: React.ReactNode }) {
+  const pathname = usePathname();
   const items = nav(identity);
-  return <div className="min-h-screen lg:flex"><Sidebar items={items}/><div className="min-w-0 flex-1"><header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur sm:px-6"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3"><div><p className="text-xs font-bold text-[#1479b8]">{roleLabel(identity.role)}</p><p className="font-black">{identity.displayName}</p></div><form action={logoutAction}><Button variant="secondary" size="sm">تسجيل الخروج</Button></form></div></header><div className="border-b border-slate-200 bg-white px-3 py-2 lg:hidden"><nav className="flex gap-2 overflow-x-auto">{items.map((item) => <LinkMobile key={item.href} {...item}/>)}</nav></div><main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</main></div></div>;
+  const mobileItems = items.filter((item) => item.mobile).slice(0, 4);
+  return <div className="app-shell min-h-screen lg:flex" data-theme={preferences.theme} data-reduced-motion={preferences.reducedMotion ? "true" : "false"}>
+    <a href="#main-content" className="skip-link">تجاوز التنقل</a>
+    <Sidebar items={items} platformName={platformName} role={roleLabel(identity.role)}/>
+    <div className="min-w-0 flex-1">
+      <header className="sticky top-0 z-30 flex h-16 items-center border-b border-[var(--border)] bg-[var(--surface)] px-4 sm:h-20 sm:px-6">
+        <div className="mx-auto flex w-full max-w-[1168px] items-center justify-between gap-3"><div><p className="text-xs font-bold text-[var(--accent)]">{roleLabel(identity.role)}</p><p className="font-heading font-bold">{identity.displayName}</p></div><form action={logoutAction}><Button variant="secondary" size="sm">تسجيل الخروج</Button></form></div>
+      </header>
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-[1168px] p-4 pb-28 sm:p-6 sm:pb-28 lg:p-10 lg:pb-12">{children}</main>
+    </div>
+    <nav aria-label="التنقل الرئيسي للهاتف" className="mobile-bottom-nav lg:hidden">
+      {mobileItems.map((item) => { const Icon = icons[item.icon]; const active = pathname === item.href || pathname.startsWith(`${item.href}/`); return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`mobile-bottom-link ${active ? "is-active" : ""}`}><Icon className="size-5"/><span>{item.label}</span></Link>; })}
+    </nav>
+  </div>;
 }
-
-function LinkMobile({ href, label, icon }: NavItem) { const Icon = mobileIcons[icon]; return <a href={href} className="focus-ring inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl bg-slate-50 px-3 text-xs font-bold"><Icon className="size-4"/>{label}</a>; }

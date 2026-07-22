@@ -21,7 +21,10 @@ export async function POST(request: Request) {
     const extension = body.kind === "video" ? (body.mimeType === "video/webm" ? "webm" : "mp4") : "pdf";
     const bucket = body.kind === "video" ? "lesson-videos" : "lesson-handouts";
     const container = body.lessonPartId ?? "direct";
-    const objectPath = `${details.group.id}/${details.subject.id}/${details.lesson.id}/${container}/${randomUUID()}.${extension}`;
+    // Legacy content is scoped by group; Learning Core content is scoped by its
+    // teacher-owned subject. The storage RLS migration validates both shapes.
+    const scopeId = details.group?.id ?? details.subject.id;
+    const objectPath = `${scopeId}/${details.subject.id}/${details.lesson.id}/${container}/${randomUUID()}.${extension}`;
     const token = createUploadToken({ userId: identity.userId, kind: body.kind, lessonId: body.lessonId, lessonPartId: body.lessonPartId, objectPath, originalFilename: body.fileName, mimeType: body.mimeType, sizeBytes: body.sizeBytes, title: body.title || body.fileName, exp: Date.now() + 20 * 60 * 1000 });
     const storageUrl = !isDemoBackend && env.NEXT_PUBLIC_SUPABASE_URL
       ? env.NEXT_PUBLIC_SUPABASE_URL.replace(".supabase.co", ".storage.supabase.co")

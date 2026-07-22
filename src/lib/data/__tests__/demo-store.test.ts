@@ -239,4 +239,30 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(preferences).toMatchObject({ userId: student.userId, theme: "dark", reducedMotion: true });
   });
 
+  it("publishes root-subject content only after a real lesson is ready", async () => {
+    const core = new DemoLearningCoreStore();
+    const content = new DemoStore();
+    const subject = await core.createLearningSubject(teacher, { title: "الرياضيات" });
+    const group = await core.createSubjectGroup(teacher, { subjectId: subject.id, name: "مجموعة الجبر" });
+    const unit = await core.createSubjectUnit(teacher, { subjectId: subject.id, title: "الجبر" });
+    const lesson = await core.createUnitLesson(teacher, { unitId: unit.id, title: "المعادلات", structureMode: "direct" });
+
+    await expect(core.publishSubjectUnit(teacher, unit.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(core.publishLearningSubject(teacher, subject.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await content.attachAsset(teacher, {
+      kind: "handout", lessonId: lesson.id, title: "ملزمة المعادلات",
+      storagePath: `${subject.id}/${subject.id}/${lesson.id}/direct/demo.pdf`,
+      originalFilename: "algebra.pdf", mimeType: "application/pdf", sizeBytes: 128,
+    });
+    await content.publishLesson(teacher, lesson.id);
+    await core.publishSubjectUnit(teacher, unit.id);
+    await core.publishLearningSubject(teacher, subject.id);
+
+    const reference = await core.rotateEnrollmentReference(student, student.userId);
+    await core.enrollStudentByReference(teacher, { groupId: group.id, enrollmentReference: reference.reference });
+    expect((await core.listLearningSubjects(student)).map((item) => item.id)).toContain(subject.id);
+    expect((await content.getLesson(student, lesson.id)).assets).toHaveLength(1);
+  });
+
 });

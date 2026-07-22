@@ -1,65 +1,38 @@
-# Final Test Report
+# تقرير الاختبارات النهائي
 
-Final verification date: 2026-07-18.
+التاريخ: 22 يوليو 2026.
 
-## Classification
+## النتيجة
 
-**LOCAL / CLEAN-ROOM BUILD: PASS**
-
-The source package compiles and the complete demo backend works end to end. Production Supabase and Render deployment files are included, but no remote account credentials were used from this isolated build environment; the target owner must apply the migration and run the remote RLS/Storage smoke test.
-
-## Automated results
-
-| Gate | Result |
+| البوابة | النتيجة |
 |---|---|
-| ESLint | PASS |
-| TypeScript strict typecheck | PASS |
-| Vitest | PASS — 13/13 |
-| Playwright desktop | PASS — 4/4 |
-| Playwright mobile | PASS — 4/4 |
-| Static security/release verification | PASS — 10 required files, 98 source files |
-| PostgreSQL migration parse | PASS — 152 statements |
-| Next.js production build | PASS — 26 static pages plus dynamic application routes |
-| npm audit | PASS — 0 vulnerabilities |
-| Production health endpoint | PASS — verified separately before packaging |
+| ESLint | PASS — بلا أخطاء أو تحذيرات |
+| TypeScript | PASS |
+| Vitest | PASS — 59/59 في 11 ملفًا |
+| Playwright | PASS — 25 ناجحًا، تخطٍ واحد مقصود، 0 فشل |
+| Desktop Chromium | PASS |
+| Pixel 5 / Mobile Chromium | PASS |
+| التحقق الثابت | PASS — 14 ملفًا مطلوبًا و124 ملف مصدر |
+| Next.js production build | PASS — 32 صفحة ثابتة/ديناميكية |
+| فحص diff | PASS |
 
-## Covered behavior
+## ما تمت تغطيته
 
-- Access-code parsing and secret verification.
-- Admin, Teacher, and Student login redirects.
-- Invalid-code generic failure.
-- Student cross-role route rejection.
-- Group and private-record isolation in the demo adapter.
-- Ownership transfer immediately revokes the old Teacher.
-- Objective grading and mixed/manual result hiding.
-- Correct-answer reveal after release only.
-- Required essay-file grading is blocked until a ready file exists.
-- Submission void removes answer records and marks uploaded submission files removed.
-- Optional one-level lesson-parts flow.
-- Safe lesson-asset replacement.
-- Session invalidation watermark is enforced in the production RLS helper chain.
-- Private Storage bucket declarations and policy presence.
+- الدخول الصحيح والخاطئ وإعادة الزائر إلى شاشة الدخول.
+- توجيه المدير والمعلم والطالب ومنع عبور صلاحيات الأدوار.
+- قوائم المواد للمعلم والطالب وتفاصيل المادة.
+- رحلة الطالب ونافذة محطة الدرس.
+- حفظ الثيم الداكن بعد إعادة التحميل.
+- شريط هاتف سفلي من أربع وجهات.
+- عزل المجموعات والسجلات الخاصة وملكية المعلم.
+- المحتوى والملفات والاختبارات والتصحيح وإخفاء الإجابات حتى الإصدار.
+- إنشاء مادة جذرية ووحدة ودرس، ومنع النشر قبل وجود محتوى جاهز.
+- تسجيل الطالب بمعرّف انضمام وتخزين البصمة فقط.
+- تقدم الطالب في الدروس.
+- قصر تعطيل الحساب وإعادة رمز الدخول على المدير.
+- تشفير كشف الرمز بـAES-256-GCM، رفض العبث، والكشف مرة واحدة.
+- فشل الإنتاج عند سر افتراضي أو غير كافٍ.
 
-## Browser screenshots
+## حد التحقق الخارجي
 
-Included in `docs/screenshots/`:
-
-- `login-desktop.png`
-- `admin-home.png`
-- `teacher-home.png`
-- `student-home.png`
-- `student-mobile.png`
-
-## Remote acceptance still required
-
-After applying `supabase/migrations/001_basira_clean.sql` to the intended staging project, verify:
-
-1. Access-code create/reset/disable against Supabase Auth.
-2. Stale JWT denial after reset/disable.
-3. Every RLS allow/deny case using real role sessions.
-4. TUS video upload, PDF upload, and essay file upload.
-5. Private object denial and short-lived authorized read URLs.
-6. Admin → Teacher → Student → submit → grade → release flow.
-7. Render exact-commit deployment and `/api/health`.
-
-A privacy, permission, grading, upload, migration, session-invalidation, or data-loss defect is **FAIL**, not PASS_WITH_FIXES.
+لم تُستخدم بيانات اعتماد Supabase حقيقية في هذه الجولة؛ لذلك لم يُطبّق migration ‏003/004 على قاعدة staging بعيدة، ولم يُنفّذ اختبار Storage/TUS البعيد. الكود والبناء المحليان ناجحان، لكن قبول الإنتاج النهائي يتطلب تطبيق migrations على مشروع staging وتشغيل smoke test بصلاحيات حقيقية.

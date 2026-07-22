@@ -1,6 +1,6 @@
 import type { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
-const base = "focus-ring min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 placeholder:text-slate-400 disabled:bg-slate-100";
+const base = "focus-ring min-h-12 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-[var(--text)] placeholder:text-[var(--muted)] disabled:bg-[var(--soft)]";
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) { return <input className={cn(base, className)} {...props} />; }
 export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) { return <textarea className={cn(base, "min-h-28 py-3", className)} {...props} />; }
 export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) { return <select className={cn(base, className)} {...props} />; }
