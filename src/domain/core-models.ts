@@ -59,8 +59,12 @@ export interface UnitLesson {
 
 export interface StudentEnrollmentReference {
   studentId: string;
-  reference: string;
+  maskedReference: string;
   rotatedAt: string;
+}
+
+export interface RevealedStudentEnrollmentReference extends StudentEnrollmentReference {
+  reference: string;
 }
 
 export interface PlatformSettings {

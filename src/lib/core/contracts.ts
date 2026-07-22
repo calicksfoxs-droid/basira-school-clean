@@ -5,6 +5,7 @@ import type {
   LearningSubject,
   LearningSubjectDetails,
   PlatformSettings,
+  RevealedStudentEnrollmentReference,
   StudentEnrollmentReference,
   SubjectGroup,
   SubjectUnit,
@@ -22,7 +23,7 @@ export interface LearningCoreStore {
   createUnitLesson(identity: Identity, input: { unitId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<UnitLesson>;
   enrollStudentByReference(identity: Identity, input: { groupId: string; enrollmentReference: string }): Promise<{ studentId: string; displayName: string }>;
   getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference>;
-  rotateEnrollmentReference(identity: Identity, studentId: string): Promise<StudentEnrollmentReference>;
+  rotateEnrollmentReference(identity: Identity, studentId: string): Promise<RevealedStudentEnrollmentReference>;
   getPlatformSettings(identity: Identity): Promise<PlatformSettings>;
   updatePlatformSettings(identity: Identity, input: { platformName: string; timezone: string; maintenanceMessage?: string }): Promise<PlatformSettings>;
   getUserPreferences(identity: Identity): Promise<UserPreferences>;
