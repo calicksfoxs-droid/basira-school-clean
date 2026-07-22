@@ -67,6 +67,14 @@ export interface RevealedStudentEnrollmentReference extends StudentEnrollmentRef
   reference: string;
 }
 
+/** Persistence-only representation. The full enrollment reference is never stored. */
+export interface StoredStudentEnrollmentReference extends StudentEnrollmentReference {
+  id: string;
+  fingerprint: string;
+  revokedAt?: string;
+  createdAt: string;
+}
+
 export interface PlatformSettings {
   platformName: string;
   timezone: string;

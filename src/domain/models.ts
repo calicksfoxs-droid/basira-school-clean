@@ -203,6 +203,14 @@ export interface DemoDatabase {
   submissions: Submission[];
   answers: Answer[];
   announcements: Announcement[];
+  learningSubjects: import("./core-models").LearningSubject[];
+  learningGroups: import("./core-models").SubjectGroup[];
+  learningMemberships: import("./core-models").SubjectGroupMembership[];
+  learningUnits: import("./core-models").SubjectUnit[];
+  learningLessons: import("./core-models").UnitLesson[];
+  learningEnrollmentReferences: import("./core-models").StoredStudentEnrollmentReference[];
+  platformSettings: import("./core-models").PlatformSettings;
+  userPreferences: import("./core-models").UserPreferences[];
 }
 
 export interface DashboardSummary {

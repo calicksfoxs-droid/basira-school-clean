@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Identity } from "@/domain/models";
 import { DemoStore } from "@/lib/data/demo-store";
+import { DemoLearningCoreStore } from "@/lib/core/demo-learning-core-store";
 import { readDemoDatabase, resetDemoDatabase } from "@/lib/demo/demo-db";
 
 const admin: Identity = { userId: "00000000-0000-4000-8000-000000000001", displayName: "مدير بصيرة", role: "admin", status: "active" };
@@ -184,6 +185,58 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(database.submissions.find((item) => item.id === submissionId)?.status).toBe("void");
     expect(database.answers.some((item) => item.submissionId === submissionId)).toBe(false);
     expect(database.assets.find((item) => item.id === asset.id)?.state).toBe("removed");
+  });
+
+  it("projects the independent subject hierarchy without exposing other groups", async () => {
+    const store = new DemoLearningCoreStore();
+    const subject = (await store.listLearningSubjects(student))[0];
+    expect(subject).toMatchObject({ teacherId: teacher.userId, status: "published" });
+    const details = await store.getLearningSubject(student, subject.id);
+    expect(details.groups).toHaveLength(1);
+    expect(details.units).toHaveLength(1);
+
+    const created = await store.createLearningSubject(teacher, { title: "الكيمياء" });
+    const group = await store.createSubjectGroup(teacher, { subjectId: created.id, name: "مجموعة الكيمياء" });
+    const unit = await store.createSubjectUnit(teacher, { subjectId: created.id, title: "الروابط" });
+    const lesson = await store.createUnitLesson(teacher, { unitId: unit.id, title: "الرابطة الأيونية", structureMode: "direct" });
+    expect(group.subjectId).toBe(created.id);
+    expect(lesson).toMatchObject({ subjectId: created.id, unitId: unit.id, status: "draft" });
+    expect((await store.listLearningSubjects(student)).some((item) => item.id === created.id)).toBe(false);
+  });
+
+  it("stores only an enrollment fingerprint and links an existing student account", async () => {
+    const store = new DemoLearningCoreStore();
+    const revealed = await store.rotateEnrollmentReference(student, student.userId);
+    expect(revealed.reference).toMatch(/^BSR-S-[A-Z2-9]{12}$/);
+    const serialized = JSON.stringify(await readDemoDatabase());
+    expect(serialized).not.toContain(revealed.reference);
+    expect(serialized).toContain(revealed.maskedReference);
+
+    const enrolled = await store.enrollStudentByReference(teacher, {
+      groupId: seededGroupId,
+      enrollmentReference: revealed.reference,
+    });
+    expect(enrolled.studentId).toBe(student.userId);
+    expect(await store.getOwnEnrollmentReference(student)).toEqual({
+      studentId: student.userId,
+      maskedReference: revealed.maskedReference,
+      rotatedAt: revealed.rotatedAt,
+    });
+  });
+
+  it("keeps platform settings admin-only and preferences account-scoped", async () => {
+    const store = new DemoLearningCoreStore();
+    await expect(store.updatePlatformSettings(teacher, {
+      platformName: "غير مسموح", timezone: "Asia/Riyadh",
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const settings = await store.updatePlatformSettings(admin, {
+      platformName: "بصيرة", timezone: "Asia/Riyadh", maintenanceMessage: "صيانة قصيرة",
+    });
+    expect(settings).toMatchObject({ updatedBy: admin.userId, maintenanceMessage: "صيانة قصيرة" });
+    const preferences = await store.updateUserPreferences(student, {
+      theme: "dark", reducedMotion: true, locale: "ar",
+    });
+    expect(preferences).toMatchObject({ userId: student.userId, theme: "dark", reducedMotion: true });
   });
 
 });

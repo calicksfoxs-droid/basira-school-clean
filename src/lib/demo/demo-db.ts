@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type { AccessCredential, DemoDatabase, Role, UserRecord } from "@/domain/models";
 import { env } from "@/lib/env";
+import { fingerprintEnrollmentReference, maskEnrollmentReference } from "@/lib/core/enrollment-reference";
 
 let mutationQueue: Promise<void> = Promise.resolve();
 
@@ -74,6 +75,8 @@ function seedDatabase(): DemoDatabase {
   const q2 = "41000000-0000-4000-8000-000000000002";
   const q3 = "41000000-0000-4000-8000-000000000003";
   const q4 = "41000000-0000-4000-8000-000000000004";
+  const unitId = "25000000-0000-4000-8000-000000000001";
+  const enrollmentReference = "BSR-S-ABCDEFGHJKLM";
   const users = [
     createUser(adminId, "مدير بصيرة", "admin"),
     createUser(teacherId, "أ. أحمد", "teacher", adminId),
@@ -110,7 +113,54 @@ function seedDatabase(): DemoDatabase {
       { id: randomUUID(), createdBy: adminId, creatorRole: "admin", targetType: "global", title: "أهلًا بك في بصيرة", body: "منصة بسيطة تجمع دروسك وملفاتك واختباراتك في مكان واحد.", ctaLabel: "فتح الرئيسية", ctaPath: "/app", isActive: true, displayOrder: 1, createdAt: now() },
       { id: randomUUID(), createdBy: teacherId, creatorRole: "teacher", targetType: "group", groupId, title: "الاختبار التجريبي متاح", body: "افتح درس الحركة ثم ابدأ الاختبار عند الاستعداد.", ctaLabel: "فتح الدرس", ctaPath: `/app/student/lessons/${lessonId}`, isActive: true, displayOrder: 2, createdAt: now() },
     ],
+    learningSubjects: [{
+      id: subjectId, teacherId, title: "الفيزياء", description: "أساسيات الحركة",
+      bannerTitle: "ابدأ رحلتك في الفيزياء", bannerBody: "كل ما تحتاجه في مكان واحد.",
+      status: "published", displayOrder: 1, createdAt: now(), updatedAt: now(),
+    }],
+    learningGroups: [{
+      id: groupId, subjectId, name: "مجموعة الفيزياء", description: "مجموعة تجريبية",
+      status: "active", createdAt: now(),
+    }],
+    learningMemberships: [{
+      id: randomUUID(), groupId, studentId, status: "active", enrolledBy: teacherId, joinedAt: now(),
+    }],
+    learningUnits: [{
+      id: unitId, subjectId, title: "الحركة", description: "أساسيات الحركة والقوى",
+      displayOrder: 1, status: "published", createdAt: now(),
+    }],
+    learningLessons: [{
+      id: lessonId, unitId, subjectId, title: "الحركة في خط مستقيم",
+      description: "درس تمهيدي بسيط", displayOrder: 1, structureMode: "direct",
+      status: "published", publishedAt: now(), createdAt: now(),
+    }],
+    learningEnrollmentReferences: [{
+      id: randomUUID(), studentId, fingerprint: fingerprintEnrollmentReference(enrollmentReference),
+      maskedReference: maskEnrollmentReference(enrollmentReference), rotatedAt: now(), createdAt: now(),
+    }],
+    platformSettings: {
+      platformName: "بصيرة", timezone: "Asia/Riyadh", updatedAt: now(), updatedBy: adminId,
+    },
+    userPreferences: users.map((user) => ({
+      userId: user.id, theme: "system" as const, reducedMotion: false, locale: "ar" as const, updatedAt: now(),
+    })),
   };
+}
+
+function withCoreDefaults(database: DemoDatabase): DemoDatabase {
+  const legacy = database as DemoDatabase & Partial<Pick<DemoDatabase,
+    "learningSubjects" | "learningGroups" | "learningMemberships" | "learningUnits" |
+    "learningLessons" | "learningEnrollmentReferences" | "platformSettings" | "userPreferences"
+  >>;
+  legacy.learningSubjects ??= [];
+  legacy.learningGroups ??= [];
+  legacy.learningMemberships ??= [];
+  legacy.learningUnits ??= [];
+  legacy.learningLessons ??= [];
+  legacy.learningEnrollmentReferences ??= [];
+  legacy.platformSettings ??= { platformName: "بصيرة", timezone: "Asia/Riyadh", updatedAt: now() };
+  legacy.userPreferences ??= [];
+  return legacy;
 }
 
 function dbPath() {
@@ -133,7 +183,7 @@ async function ensureDatabase() {
 
 export async function readDemoDatabase(): Promise<DemoDatabase> {
   await ensureDatabase();
-  return JSON.parse(await readFile(dbPath(), "utf8")) as DemoDatabase;
+  return withCoreDefaults(JSON.parse(await readFile(dbPath(), "utf8")) as DemoDatabase);
 }
 
 export async function mutateDemoDatabase<T>(fn: (database: DemoDatabase) => T | Promise<T>): Promise<T> {
