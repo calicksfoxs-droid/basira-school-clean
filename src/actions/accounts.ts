@@ -15,8 +15,11 @@ export async function createTeacherAction(formData: FormData) {
     const created = await (await getStore()).createTeacher(identity, parsed);
     await setAccessCodeFlash(created.code, created.user.displayName);
     revalidatePath("/app/admin");
-    redirect("/app/access-code");
-  } catch (error) { handleActionError(error, path); }
+  } catch (error) {
+    handleActionError(error, path);
+  }
+
+  redirect("/app/access-code");
 }
 
 export async function createStudentAction(formData: FormData) {
@@ -33,8 +36,11 @@ export async function createStudentAction(formData: FormData) {
     const created = await (await getStore()).createStudent(identity, parsed);
     await setAccessCodeFlash(created.code, created.user.displayName);
     revalidatePath("/app");
-    redirect("/app/access-code");
-  } catch (error) { handleActionError(error, path); }
+  } catch (error) {
+    handleActionError(error, path);
+  }
+
+  redirect("/app/access-code");
 }
 
 export async function resetAccessCodeAction(formData: FormData) {
@@ -44,8 +50,11 @@ export async function resetAccessCodeAction(formData: FormData) {
     const userId = formText(formData, "userId");
     const created = await (await getStore()).resetAccessCode(identity, userId);
     await setAccessCodeFlash(created.code, created.user.displayName);
-    redirect("/app/access-code");
-  } catch (error) { handleActionError(error, path); }
+  } catch (error) {
+    handleActionError(error, path);
+  }
+
+  redirect("/app/access-code");
 }
 
 export async function disableUserAction(formData: FormData) {
@@ -54,6 +63,9 @@ export async function disableUserAction(formData: FormData) {
     const identity = await requireRole("admin", "teacher");
     await (await getStore()).disableUser(identity, formText(formData, "userId"));
     revalidatePath(path);
-    redirectNotice(path, "تم تعطيل الحساب");
-  } catch (error) { handleActionError(error, path); }
+  } catch (error) {
+    handleActionError(error, path);
+  }
+
+  redirectNotice(path, "تم تعطيل الحساب");
 }

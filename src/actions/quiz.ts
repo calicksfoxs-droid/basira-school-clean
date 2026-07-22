@@ -29,10 +29,14 @@ export async function submitQuizFormAction(formData: FormData) {
   const quizId = String(formData.get("quizId") ?? "");
   let submissionId: string | undefined;
   const createdLocalPaths: string[] = [];
+  let identity;
+  let store;
+  let quiz;
+
   try {
-    const identity = await requireRole("student");
-    const store = await getStore();
-    const quiz = await store.getQuiz(identity, quizId);
+    identity = await requireRole("student");
+    store = await getStore();
+    quiz = await store.getQuiz(identity, quizId);
     const answers = quiz.questions.map((question) => {
       if (question.type === "mcq") return { questionId: question.id, selectedOptionId: String(formData.get(`question_${question.id}`) ?? "") || undefined };
       if (question.type === "true_false") return { questionId: question.id, booleanValue: formData.get(`question_${question.id}`) === "true" };
@@ -56,19 +60,22 @@ export async function submitQuizFormAction(formData: FormData) {
       await store.attachSubmissionFile(identity, submissionId, question.id, { storagePath, originalFilename: value.name, mimeType: value.type, sizeBytes: value.size, bytes });
     }
     revalidatePath("/app/student");
-    redirect(`/app/student/results/${submissionId}`);
   } catch (error) {
-    if (submissionId) {
-      try { const identity = await requireRole("student"); await (await getStore()).voidSubmission(identity, submissionId); } catch { /* best effort rollback */ }
+    if (submissionId && identity) {
+      try { await store?.voidSubmission(identity, submissionId); } catch { /* best effort rollback */ }
     }
     await Promise.all(createdLocalPaths.map((file) => rm(file, { force: true }).catch(() => undefined)));
     handleActionError(error, `/app/student/quizzes/${quizId}`);
   }
+
+  redirect(`/app/student/results/${submissionId}`);
 }
 
 export async function gradeSubmissionAction(formData: FormData) {
   const submissionId = String(formData.get("submissionId") ?? "");
   const pathValue = `/app/teacher/submissions/${submissionId}`;
+  let notice = "تم حفظ التصحيح";
+
   try {
     const identity = await requireRole("teacher");
     const store = await getStore();
@@ -81,7 +88,11 @@ export async function gradeSubmissionAction(formData: FormData) {
     }
     const release = formData.get("release") === "on";
     await store.gradeSubmission(identity, submissionId, scores, feedback, release);
+    notice = release ? "تم التصحيح وإصدار النتيجة" : "تم حفظ التصحيح";
     revalidatePath("/app");
-    redirectNotice(pathValue, release ? "تم التصحيح وإصدار النتيجة" : "تم حفظ التصحيح");
-  } catch (error) { handleActionError(error, pathValue); }
+  } catch (error) {
+    handleActionError(error, pathValue);
+  }
+
+  redirectNotice(pathValue, notice);
 }
