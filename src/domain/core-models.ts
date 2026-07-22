@@ -1,5 +1,5 @@
 export type CoreStatus = "draft" | "published" | "archived";
-export type MembershipStatus = "active" | "disabled";
+export type MembershipStatus = "active" | "removed";
 
 export interface LearningSubject {
   id: string;
@@ -72,7 +72,7 @@ export interface PlatformSettings {
   timezone: string;
   maintenanceMessage?: string;
   updatedAt: string;
-  updatedBy: string;
+  updatedBy?: string;
 }
 
 export interface UserPreferences {
