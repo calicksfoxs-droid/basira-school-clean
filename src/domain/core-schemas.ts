@@ -33,8 +33,8 @@ export const createSubjectUnitSchema = z.object({
 
 export const createUnitLessonSchema = z.object({
   unitId: z.string().uuid(),
-  title: z.string().trim().min(2).max(160),
-  description: optionalText(1000),
+  title: z.string().trim().min(2).max(120),
+  description: optionalText(500),
   structureMode: z.enum(["direct", "parts"]),
 });
 
