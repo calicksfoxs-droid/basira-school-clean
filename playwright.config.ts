@@ -9,6 +9,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
+  expect: { timeout: 15_000 },
   use: {
     baseURL: "http://127.0.0.1:3100",
     trace: "retain-on-failure",

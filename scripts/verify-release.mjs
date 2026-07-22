@@ -12,7 +12,11 @@ const required = [
   "src/lib/auth/index.ts",
   "src/lib/data/demo-store.ts",
   "src/lib/data/supabase-store.ts",
+  "src/lib/core/demo-learning-core-store.ts",
+  "src/lib/core/supabase-learning-core-store.ts",
+  "src/app/api/learning/enrollment-reference/route.ts",
   "supabase/migrations/001_basira_clean.sql",
+  "supabase/migrations/002_independent_learning_core.sql",
 ];
 const failures = [];
 for (const file of required) {
@@ -40,6 +44,15 @@ const migration = await readFile(path.join(root, "supabase/migrations/001_basira
 for (const expected of ["enable row level security", "session_is_current", "quiz_question_answers", "finalize_lesson_asset_phase13a", "submit_quiz_phase13a", "grade_submission_phase13a", "Required essay file is missing"]) {
   if (!migration.toLowerCase().includes(expected.toLowerCase())) failures.push(`Migration missing required lock: ${expected}`);
 }
+const coreMigration = await readFile(path.join(root, "supabase/migrations/002_independent_learning_core.sql"), "utf8");
+for (const expected of ["subject_units", "owner_teacher_id", "student_in_learning_subject_v1", "enroll_student_by_reference_v1", "fingerprint", "masked_reference"]) {
+  if (!coreMigration.toLowerCase().includes(expected.toLowerCase())) failures.push(`Core migration missing required lock: ${expected}`);
+}
+const referenceTable = coreMigration.match(/create table if not exists public\.student_enrollment_references[\s\S]*?\n\);/iu)?.[0] ?? "";
+if (!referenceTable) failures.push("Enrollment reference table declaration not found");
+if (/\b(reference|secret|plaintext)\s+text\b/iu.test(referenceTable)) failures.push("Enrollment reference table stores recoverable plaintext");
+const referenceRoute = await readFile(path.join(root, "src/app/api/learning/enrollment-reference/route.ts"), "utf8");
+if (!/Cache-Control.*no-store/isu.test(referenceRoute)) failures.push("Enrollment reference reveal response is cacheable");
 const bucketBlockMatch = migration.match(/insert into storage\.buckets[\s\S]*?on conflict/iu);
 if (!bucketBlockMatch) {
   failures.push("Storage bucket declaration block not found");
