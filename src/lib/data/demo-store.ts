@@ -384,14 +384,20 @@ export class DemoStore implements BasiraStore {
     assertAllowed(identity.role === "student");
     return mutateDemoDatabase((db) => {
       const quiz = assertFound(db.quizzes.find((q) => q.id === quizId && q.status === "published"));
-      const lesson = assertFound(db.lessons.find((l) => l.id === quiz.lessonId && l.status === "published"));
+      const part = quiz.lessonPartId ? assertFound(db.lessonParts.find((item) => item.id === quiz.lessonPartId)) : undefined;
+      const lesson = assertFound(db.lessons.find((item) => item.id === (quiz.lessonId ?? part?.lessonId) && item.status === "published"));
       const subject = assertFound(db.subjects.find((s) => s.id === lesson.subjectId));
       assertAllowed(db.memberships.some((m) => m.groupId === subject.groupId && m.studentId === identity.userId && m.status === "active"));
       assertAllowed(!db.submissions.some((s) => s.quizId === quizId && s.studentId === identity.userId && s.status !== "void"), "تم تسليم هذا الاختبار بالفعل");
       const questions = db.questions.filter((q) => q.quizId === quiz.id);
+      assertAllowed(inputs.length === questions.length && new Set(inputs.map((input) => input.questionId)).size === questions.length, "يجب إرسال إجابة واحدة لكل سؤال");
+      assertAllowed(inputs.every((input) => questions.some((question) => question.id === input.questionId)), "توجد إجابة لسؤال غير صالح");
       const submission: Submission = { id: randomUUID(), quizId, studentId: identity.userId, status: quiz.hasManualQuestions ? "pending_review" : "released", objectiveScore: 0, manualScore: 0, totalScore: 0, submittedAt: now(), releasedAt: quiz.hasManualQuestions ? undefined : now(), resetCount: 0 };
       const answers: Answer[] = questions.map((question) => {
-        const input = inputs.find((a) => a.questionId === question.id) ?? { questionId: question.id };
+        const input = assertFound(inputs.find((answer) => answer.questionId === question.id));
+        if (question.type === "mcq") assertAllowed(Boolean(input.selectedOptionId && question.options?.some((option) => option.id === input.selectedOptionId)), "اختر إجابة صالحة");
+        if (question.type === "true_false") assertAllowed(typeof input.booleanValue === "boolean", "اختر صح أو خطأ");
+        if (question.type === "essay_text") assertAllowed(Boolean(input.textValue?.trim()), "اكتب الإجابة المطلوبة");
         const autoScore = gradeObjectiveAnswer(question, input);
         return { id: randomUUID(), submissionId: submission.id, questionId: question.id, selectedOptionId: input.selectedOptionId, booleanValue: input.booleanValue, textValue: input.textValue, fileAssetId: input.fileAssetId, autoScore };
       });

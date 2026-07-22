@@ -118,6 +118,40 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(studentLesson.assets[0]).toMatchObject({ lessonPartId: part.id, kind: "handout", state: "ready" });
   });
 
+  it("submits a quiz attached to a lesson part", async () => {
+    const store = new DemoStore();
+    const subject = await store.createSubject(teacher, { groupId: seededGroupId, title: "الأحياء" });
+    const lesson = await store.createLesson(teacher, { subjectId: subject.id, title: "الخلية", structureMode: "parts" });
+    const part = await store.createLessonPart(teacher, { lessonId: lesson.id, title: "مكونات الخلية" });
+    const quizId = await store.createQuiz(teacher, {
+      lessonPartId: part.id,
+      title: "اختبار المكونات",
+      questions: [{ type: "true_false", prompt: "النواة جزء من الخلية", points: 2, correctBoolean: true }],
+    });
+    await store.publishLesson(teacher, lesson.id);
+
+    const quiz = await store.getQuiz(student, quizId);
+    const submissionId = await store.submitQuiz(student, quizId, [{ questionId: quiz.questions[0].id, booleanValue: true }]);
+    const submission = await store.getSubmission(student, submissionId);
+
+    expect(submission.submission).toMatchObject({ quizId, status: "released", totalScore: 2 });
+    expect(submission.quiz.lessonPartId).toBe(part.id);
+  });
+
+  it("rejects incomplete or malformed objective answers", async () => {
+    const store = new DemoStore();
+    const quiz = await store.getQuiz(teacher, seededQuizId);
+    const validInputs = quiz.questions.map((question) => {
+      if (question.type === "mcq") return { questionId: question.id, selectedOptionId: question.options?.[0]?.id };
+      if (question.type === "true_false") return { questionId: question.id, booleanValue: false };
+      if (question.type === "essay_text") return { questionId: question.id, textValue: "إجابة" };
+      return { questionId: question.id };
+    });
+
+    await expect(store.submitQuiz(student, seededQuizId, validInputs.slice(1))).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(store.submitQuiz(student, seededQuizId, validInputs.map((input, index) => index === 0 ? { questionId: input.questionId, selectedOptionId: "غير-صالح" } : input))).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("removes the old teacher's access immediately after ownership transfer", async () => {
     const store = new DemoStore();
     const created = await store.createTeacher(admin, { displayName: "أ. منى" });
