@@ -48,6 +48,14 @@ export async function createLearningSubjectAction(formData: FormData): Promise<A
   } catch (error) { return failure(error); }
 }
 
+/** Client-form adapter that preserves validation feedback instead of silently staying on the page. */
+export async function createLearningSubjectWithStateAction(
+  _previousState: ActionResult<{ id: string }>,
+  formData: FormData,
+): Promise<ActionResult<{ id: string }>> {
+  return createLearningSubjectAction(formData);
+}
+
 export async function updateLearningSubjectBannerAction(formData: FormData): Promise<ActionResult> {
   try {
     const identity = await requireRole("admin", "teacher");
