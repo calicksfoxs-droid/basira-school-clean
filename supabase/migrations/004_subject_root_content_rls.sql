@@ -140,9 +140,9 @@ as $$
 $$;
 
 -- The migration-002 lesson policy did not require the parent unit itself to be
--- published. Replace it so a draft unit cannot leak a published child lesson.
-drop policy if exists lessons_student_enrolled_v1 on public.lessons;
-create policy lessons_student_enrolled_v1 on public.lessons for select
+-- published. Tighten the existing policy in place so a draft unit cannot leak
+-- a published child lesson. This preserves the policy object without DROP.
+alter policy lessons_student_enrolled_v1 on public.lessons
 using (public.student_can_access_lesson(id));
 
 -- Core-subject policies are additive. The legacy group-scoped policies remain
