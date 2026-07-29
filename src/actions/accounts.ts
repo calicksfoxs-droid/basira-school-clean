@@ -88,6 +88,11 @@ export type CreateStudentRevealState = ActionResult<{
   displayName: string;
 }>;
 
+export type ResetAccessCodeRevealState = ActionResult<{
+  code: string;
+  displayName: string;
+}>;
+
 /**
  * Creates a student and returns the credential exactly once to the hydrated
  * form that initiated the request. The credential is never placed in a URL,
@@ -141,6 +146,31 @@ export async function resetAccessCodeAction(formData: FormData) {
   }
 
   redirect("/app/access-code");
+}
+
+/** Returns a new credential to the initiating administrator without a redirect. */
+export async function resetAccessCodeWithRevealAction(
+  _previousState: ResetAccessCodeRevealState,
+  formData: FormData,
+): Promise<ResetAccessCodeRevealState> {
+  const path = returnPath(formData, "/app/admin");
+
+  try {
+    const identity = await requireRole("admin");
+    const created = await (await getStore()).resetAccessCode(identity, formText(formData, "userId"));
+    revalidatePath(path);
+    return {
+      ok: true,
+      data: { code: created.code, displayName: created.user.displayName },
+      message: "تم إصدار رمز دخول جديد",
+    };
+  } catch (error) {
+    console.error(error instanceof AppError ? `[${error.code}] ${error.message}` : error);
+    return {
+      ok: false,
+      error: error instanceof AppError ? error.message : "تعذر إصدار الرمز الجديد. حاول مرة أخرى.",
+    };
+  }
 }
 
 export async function disableUserAction(formData: FormData) {
