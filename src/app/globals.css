@@ -36,6 +36,18 @@ body {
   --border: #31415f; --text: #f7f7fb; --muted: #aeb8ca; --brand: #62d8ff; --accent: #57e3d2;
   color-scheme: dark;
 }
+.app-shell[data-theme="dark"] .border-slate-200,
+.app-shell[data-theme="dark"] .border-slate-300 { border-color: var(--border); }
+.app-shell[data-theme="dark"] .divide-slate-200 > :not(:last-child) { border-color: var(--border); }
+.app-shell[data-theme="dark"] .bg-white,
+.app-shell[data-theme="dark"] .bg-slate-50,
+.app-shell[data-theme="dark"] .bg-slate-100 { background-color: var(--surface); }
+.app-shell[data-theme="dark"] .text-slate-400,
+.app-shell[data-theme="dark"] .text-slate-500,
+.app-shell[data-theme="dark"] .text-slate-600,
+.app-shell[data-theme="dark"] .text-slate-700 { color: var(--muted); }
+.app-shell[data-theme="dark"] .hover\:bg-slate-50:hover,
+.app-shell[data-theme="dark"] .hover\:bg-sky-50:hover { background-color: var(--soft); }
 @media (prefers-color-scheme: dark) {
   .app-shell[data-theme="system"] {
     --canvas: #111729; --bg: #111729; --surface: #182136; --soft: #222d44;
