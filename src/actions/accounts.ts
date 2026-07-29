@@ -24,6 +24,44 @@ export async function createTeacherAction(formData: FormData) {
   redirect("/app/access-code");
 }
 
+export type CreateTeacherRevealState = ActionResult<{
+  code: string;
+  displayName: string;
+}>;
+
+/**
+ * Creates a teacher and reveals the one-time credential in the submitting
+ * form. This avoids relying on a redirect/cookie hand-off for a secret that
+ * must be copied before the administrator leaves the page.
+ */
+export async function createTeacherWithRevealAction(
+  _previousState: CreateTeacherRevealState,
+  formData: FormData,
+): Promise<CreateTeacherRevealState> {
+  const path = returnPath(formData, "/app/admin/teachers");
+
+  try {
+    const identity = await requireRole("admin");
+    const parsed = createUserSchema.parse({ displayName: formText(formData, "displayName") });
+    const created = await (await getStore()).createTeacher(identity, parsed);
+    revalidatePath(path);
+
+    return {
+      ok: true,
+      data: { code: created.code, displayName: created.user.displayName },
+      message: "تم إنشاء المعلّم وإصدار رمز الدخول",
+    };
+  } catch (error) {
+    console.error(error instanceof AppError ? `[${error.code}] ${error.message}` : error);
+    return {
+      ok: false,
+      error: error instanceof AppError
+        ? error.message
+        : "تعذر إنشاء المعلّم الآن. راجع البيانات وحاول مرة أخرى.",
+    };
+  }
+}
+
 export async function createStudentAction(formData: FormData) {
   const path = returnPath(formData, "/app/teacher/students");
   try {
