@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "node --import ./scripts/legacy-brace-expansion.mjs ./node_modules/eslint/bin/eslint.js .",
     "typecheck": "node scripts/prepare-typecheck.mjs && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -27,7 +27,7 @@
     "lowdb": "^7.0.1",
     "lucide-react": "^1.25.0",
     "nanoid": "^6.0.0",
-    "next": "16.2.9",
+    "next": "16.2.12",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.82.0",
@@ -45,14 +45,16 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.2.12",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "postcss": "8.5.19"
+    "postcss": "8.5.19",
+    "brace-expansion": "5.0.8",
+    "sharp": "0.35.3"
   }
 }
