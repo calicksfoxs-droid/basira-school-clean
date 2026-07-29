@@ -12,7 +12,7 @@ export function returnPath(formData: FormData, fallback: string) {
 }
 
 export function redirectNotice(path: string, message: string, type: "notice" | "error" = "notice"): never {
-  const url = new URL(path, "http://local");
+  const url = new URL(path, "https://local");
   url.searchParams.set(type, message);
   redirect(`${url.pathname}${url.search}`);
 }
