@@ -26,11 +26,16 @@ export async function loginWithAccessCode(code: string): Promise<{ ok: true; ide
   }
 
   const admin = createAdminSupabaseClient();
-  const { data: credential } = await admin
+  const { data: credential, error: credentialError } = await admin
     .from("access_credentials")
     .select("auth_user_id, state, synthetic_email, profiles!inner(display_name, role, status, session_invalid_before)")
     .eq("public_account_ref", parsed.publicRef)
     .maybeSingle();
+
+  if (credentialError) {
+    console.error("Supabase access credential lookup failed", credentialError.message);
+    return { ok: false, error: "رمز الدخول غير صالح" };
+  }
 
   const profileValue = credential?.profiles;
   const profile = Array.isArray(profileValue) ? profileValue[0] : profileValue;
@@ -40,7 +45,10 @@ export async function loginWithAccessCode(code: string): Promise<{ ok: true; ide
 
   const supabase = await createServerSupabaseClient();
   const { error } = await supabase.auth.signInWithPassword({ email: credential.synthetic_email, password: parsed.secret });
-  if (error) return { ok: false, error: "رمز الدخول غير صالح" };
+  if (error) {
+    console.error("Supabase access-code sign-in failed", error.message);
+    return { ok: false, error: "رمز الدخول غير صالح" };
+  }
   await admin.from("access_credentials").update({ state: "active", first_used_at: new Date().toISOString() }).eq("auth_user_id", credential.auth_user_id);
   return {
     ok: true,
