@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BookOpen, ChevronLeft, Compass, Layers3, Plus, Users } from "lucide-react";
+import { BookOpen, ChevronLeft, Compass, ImageIcon, Layers3, Plus, Users } from "lucide-react";
 import type { Identity } from "@/domain/models";
 import type { LearningSubjectDetails } from "@/domain/core-models";
 import {
@@ -18,20 +18,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
-
-function heroImage(title: string) {
-  if (/عرب|لغة/.test(title)) return "/images/basira/arabic-hero-spectrum-v1.png";
-  if (/علوم|فيزياء|كيمياء|أحياء/.test(title)) return "/images/basira/science-hero-spectrum-v1.png";
-  return "/images/basira/subject-hero-spectrum-v1.png";
-}
+import { SubjectCoverPicker } from "@/components/learning/subject-cover-picker";
+import { subjectCoverPath } from "@/lib/subject-covers";
 
 export function LearningSubjectView({ identity, details }: { identity: Identity; details: LearningSubjectDetails }) {
   const editable = identity.role === "teacher";
   const lessonsByUnit = new Map(details.units.map((unit) => [unit.id, details.lessons.filter((lesson) => lesson.unitId === unit.id)]));
   return <div className="grid gap-6">
     <section className="relative min-h-[300px] overflow-hidden rounded-[28px] bg-[#2b1459] text-white">
-      <Image src={heroImage(details.subject.title)} alt="" fill priority sizes="(max-width: 1024px) 100vw, 1100px" className="object-cover"/>
+      <Image data-testid="subject-hero-cover" src={subjectCoverPath(details.subject)} alt="" fill priority sizes="(max-width: 1024px) 100vw, 1100px" className="object-cover"/>
       <div className="absolute inset-0 bg-[#170b35]/55"/>
+      {editable && <a href="#subject-cover-picker" className="focus-ring absolute left-5 top-5 z-10 inline-flex min-h-11 items-center gap-2 rounded-2xl border border-white/25 bg-[#170b35]/70 px-4 text-sm font-black text-white shadow-lg backdrop-blur transition hover:bg-[#170b35]"><ImageIcon className="size-4"/> تغيير الغلاف</a>}
       <div className="relative flex min-h-[300px] max-w-2xl flex-col items-start justify-end p-7 sm:p-10">
         <span className="mb-3 rounded-full bg-[#20c7b5] px-3 py-1 text-xs font-black text-[#170b35]">{details.subject.status === "published" ? "مادة منشورة" : "مسودة"}</span>
         <h1 className="font-heading text-3xl font-bold sm:text-4xl">{details.subject.bannerTitle || details.subject.title}</h1>
@@ -75,6 +72,7 @@ export function LearningSubjectView({ identity, details }: { identity: Identity;
     </section>
 
     {editable && <section className="grid gap-5 xl:grid-cols-2">
+      <SubjectCoverPicker subject={details.subject}/>
       <Card><CardTitle>إعداد إعلان المادة</CardTitle><CardDescription>يظهر أعلى صفحة المادة للطلاب.</CardDescription><ActionForm action={updateLearningSubjectBannerAction} className="mt-5 grid gap-4"><input type="hidden" name="subjectId" value={details.subject.id}/><Field label="عنوان الإعلان"><Input name="title" defaultValue={details.subject.bannerTitle}/></Field><Field label="النص"><Textarea name="body" defaultValue={details.subject.bannerBody}/></Field><Button>حفظ الإعلان</Button></ActionForm></Card>
       <Card><CardTitle>إضافة وحدة</CardTitle><CardDescription>كل وحدة تحتوي على مجموعة دروس مرتبة.</CardDescription><ActionForm action={createLearningUnitAction} className="mt-5 grid gap-4"><input type="hidden" name="subjectId" value={details.subject.id}/><Field label="اسم الوحدة"><Input name="title" required/></Field><Field label="وصف مختصر"><Textarea name="description"/></Field><Button>إضافة الوحدة</Button></ActionForm></Card>
       <Card><CardTitle>إضافة مجموعة</CardTitle><CardDescription>المجموعات تحدد الطلاب الذين يرون المادة.</CardDescription><ActionForm action={createLearningGroupAction} className="mt-5 grid gap-4"><input type="hidden" name="subjectId" value={details.subject.id}/><Field label="اسم المجموعة"><Input name="name" required/></Field><Field label="الوصف"><Textarea name="description"/></Field><Button>إضافة المجموعة</Button></ActionForm></Card>

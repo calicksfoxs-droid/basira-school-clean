@@ -10,6 +10,7 @@ import {
   enrollStudentSchema,
   platformSettingsSchema,
   updateSubjectBannerSchema,
+  updateSubjectCoverSchema,
   userPreferencesSchema,
 } from "@/domain/core-schemas";
 import type { ActionResult } from "@/lib/action-result";
@@ -78,6 +79,18 @@ export async function updateLearningSubjectBannerAction(formData: FormData): Pro
     await getLearningCoreStore().updateSubjectBanner(identity, input);
     revalidatePath("/app");
     return { ok: true, data: undefined, message: "تم تحديث إعلان المادة" };
+  } catch (error) { return failure(error); }
+}
+
+export async function updateLearningSubjectCoverAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const identity = await requireRole("teacher");
+    const input = updateSubjectCoverSchema.parse({
+      subjectId: text(formData, "subjectId"), coverKey: text(formData, "coverKey"),
+    });
+    await getLearningCoreStore().updateSubjectCover(identity, input);
+    revalidatePath("/app");
+    return { ok: true, data: undefined, message: "تم حفظ غلاف المادة وظهر للطلاب" };
   } catch (error) { return failure(error); }
 }
 

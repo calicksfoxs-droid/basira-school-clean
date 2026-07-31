@@ -5,6 +5,7 @@ import type {
   LearningJourneyNode,
   LearningSubject,
   LearningSubjectDetails,
+  SubjectCoverKey,
   PlatformSettings,
   RevealedStudentEnrollmentReference,
   StudentEnrollmentReference,
@@ -22,6 +23,7 @@ import {
   verifyEnrollmentReference,
 } from "./enrollment-reference";
 import type { LearningCoreStore } from "./contracts";
+import { inferSubjectCoverKey } from "@/lib/subject-covers";
 
 const now = () => new Date().toISOString();
 
@@ -92,7 +94,7 @@ export class DemoLearningCoreStore implements LearningCoreStore {
       const timestamp = now();
       const subject: LearningSubject = {
         id: randomUUID(), teacherId: identity.userId, title: input.title.trim(),
-        description: input.description?.trim() || undefined, status: "draft",
+        description: input.description?.trim() || undefined, coverKey: inferSubjectCoverKey(input.title), status: "draft",
         displayOrder: database.learningSubjects.filter((item) => item.teacherId === identity.userId).length + 1,
         createdAt: timestamp, updatedAt: timestamp,
       };
@@ -120,6 +122,14 @@ export class DemoLearningCoreStore implements LearningCoreStore {
       subject.bannerBody = input.body?.trim() || undefined;
       subject.bannerCtaLabel = input.ctaLabel?.trim() || undefined;
       subject.bannerCtaPath = input.ctaPath?.trim() || undefined;
+      subject.updatedAt = now();
+    });
+  }
+
+  async updateSubjectCover(identity: Identity, input: { subjectId: string; coverKey: SubjectCoverKey }): Promise<void> {
+    await mutateDemoDatabase((database) => {
+      const subject = ownSubject(database, identity, input.subjectId);
+      subject.coverKey = input.coverKey;
       subject.updatedAt = now();
     });
   }

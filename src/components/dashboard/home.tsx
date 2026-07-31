@@ -8,6 +8,7 @@ import { StatGrid } from "./stat-grid";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
+import { subjectCoverPath } from "@/lib/subject-covers";
 
 function subjectHref(identity: Identity, id: string) { return `/app/${identity.role}/subjects/${id}`; }
 
@@ -17,7 +18,7 @@ function StudentHome({ identity, summary, subjects }: { identity: Identity; summ
     <header><h1 className="font-heading text-3xl font-bold">أهلًا يا {identity.displayName.split(" ")[0]} 👋</h1><p className="mt-2 text-sm text-[var(--muted)]">خطوة صغيرة اليوم تصنع فرقًا كبيرًا.</p></header>
     {first ? <Link href={`/app/student/subjects/${first.id}/journey`} className="focus-ring group grid min-h-[220px] overflow-hidden rounded-[26px] border border-[var(--border)] bg-[var(--surface)] sm:grid-cols-[1fr_280px]">
       <div className="flex flex-col items-start justify-center p-7"><span className="text-xs font-bold text-[var(--accent)]">تابع من حيث توقفت</span><h2 className="font-heading mt-2 text-2xl font-bold">{first.bannerTitle || first.title}</h2><p className="mt-2 text-sm leading-7 text-[var(--muted)]">{first.bannerBody || first.description || "رحلتك التعليمية جاهزة للمتابعة."}</p><span className="mt-5 inline-flex items-center gap-2 font-bold text-[var(--brand)]">فتح الرحلة <ArrowLeft className="size-4 transition group-hover:-translate-x-1"/></span></div>
-      <div className="relative min-h-48 bg-[#2b1459]"><Image src="/images/basira/subject-hero-spectrum-v1.png" alt="" fill priority sizes="280px" className="object-cover"/></div>
+      <div className="relative min-h-48 bg-[#2b1459]"><Image src={subjectCoverPath(first)} alt="" fill priority sizes="280px" className="object-cover"/></div>
     </Link> : <EmptyState title="لا توجد مواد مسجلة" description="ستظهر موادك بعد أن يسجلك المعلم في مجموعته."/>}
     <section><div className="mb-4 flex items-center justify-between"><h2 className="font-heading text-2xl font-bold">موادي</h2><Link className="text-sm font-bold text-[var(--brand)]" href="/app/student/subjects">عرض الكل</Link></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{subjects.slice(0,3).map((subject, index) => <Link key={subject.id} href={subjectHref(identity, subject.id)} className="focus-ring rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-5"><span className="text-xs font-bold text-[var(--accent)]">المادة {index + 1}</span><h3 className="font-heading mt-2 text-lg font-bold">{subject.title}</h3><p className="mt-2 line-clamp-2 text-sm text-[var(--muted)]">{subject.description || "محتوى ودروس مرتبة"}</p><span className="mt-5 block text-sm font-bold text-[var(--brand)]">فتح المادة ←</span></Link>)}</div></section>
     <AnnouncementCarousel items={summary.announcements}/>

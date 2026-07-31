@@ -1,11 +1,25 @@
 export type CoreStatus = "draft" | "published" | "archived";
 export type MembershipStatus = "active" | "removed";
+export const SUBJECT_COVER_KEYS = [
+  "general",
+  "arabic",
+  "english",
+  "mathematics",
+  "physics",
+  "chemistry",
+  "biology",
+  "history",
+  "geography",
+  "computer",
+] as const;
+export type SubjectCoverKey = (typeof SUBJECT_COVER_KEYS)[number];
 
 export interface LearningSubject {
   id: string;
   teacherId: string;
   title: string;
   description?: string;
+  coverKey?: SubjectCoverKey;
   bannerTitle?: string;
   bannerBody?: string;
   bannerCtaLabel?: string;

@@ -4,12 +4,7 @@ import { ArrowLeft, BookOpen, Users } from "lucide-react";
 import type { Identity } from "@/domain/models";
 import type { LearningSubject } from "@/domain/core-models";
 import { EmptyState } from "@/components/ui/empty-state";
-
-function subjectImage(title: string) {
-  if (/عرب|لغة/.test(title)) return "/images/basira/arabic-hero-spectrum-v1.png";
-  if (/علوم|فيزياء|كيمياء|أحياء/.test(title)) return "/images/basira/science-hero-spectrum-v1.png";
-  return "/images/basira/subject-hero-spectrum-v1.png";
-}
+import { subjectCoverPath } from "@/lib/subject-covers";
 
 function subjectHref(identity: Identity, subjectId: string) {
   return `/app/${identity.role}/subjects/${subjectId}`;
@@ -21,7 +16,7 @@ export function SubjectGallery({ identity, subjects }: { identity: Identity; sub
   return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     {subjects.map((subject, index) => <Link key={subject.id} href={subjectHref(identity, subject.id)} className="focus-ring group overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)] transition hover:-translate-y-1 hover:shadow-[0_18px_44px_rgba(23,32,51,.10)]">
       <div className="relative aspect-[16/8.7] overflow-hidden bg-[#2b1459]">
-        <Image src={subjectImage(subject.title)} alt="" fill priority={index < 3} sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw" className="object-cover transition duration-500 group-hover:scale-[1.03]"/>
+        <Image src={subjectCoverPath(subject)} alt="" fill priority={index < 3} sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw" className="object-cover transition duration-500 group-hover:scale-[1.03]"/>
         <span className="absolute right-4 top-4 rounded-full bg-white/92 px-3 py-1 text-xs font-bold text-[#172033]">{subject.status === "published" ? "منشورة" : "مسودة"}</span>
       </div>
       <div className="p-5">

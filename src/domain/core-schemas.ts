@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SUBJECT_COVER_KEYS } from "@/domain/core-models";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().transform((value) => value || undefined);
 const internalPath = z.string().trim().max(300).refine((value) => value.startsWith("/app"), "يجب أن يكون الرابط داخلياً");
@@ -17,6 +18,11 @@ export const updateSubjectBannerSchema = z.object({
 }).refine((value) => Boolean(value.ctaLabel) === Boolean(value.ctaPath), {
   message: "نص الزر ورابطه مطلوبان معاً",
   path: ["ctaLabel"],
+});
+
+export const updateSubjectCoverSchema = z.object({
+  subjectId: z.string().uuid(),
+  coverKey: z.enum(SUBJECT_COVER_KEYS),
 });
 
 export const createSubjectGroupSchema = z.object({

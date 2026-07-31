@@ -116,6 +116,7 @@ function seedDatabase(): DemoDatabase {
     ],
     learningSubjects: [{
       id: subjectId, teacherId, title: "الفيزياء", description: "أساسيات الحركة",
+      coverKey: "physics",
       bannerTitle: "ابدأ رحلتك في الفيزياء", bannerBody: "كل ما تحتاجه في مكان واحد.",
       status: "published", displayOrder: 1, createdAt: now(), updatedAt: now(),
     }],

@@ -4,13 +4,14 @@ import { Check, Lock, Play } from "lucide-react";
 import type { LearningJourneyNode, LearningSubjectDetails } from "@/domain/core-models";
 import { completeLearningLessonFormAction as completeLearningLessonAction } from "@/actions/learning-core";
 import { Button } from "@/components/ui/button";
+import { subjectCoverPath } from "@/lib/subject-covers";
 
 export function LearningJourneyView({ details, nodes, selectedLessonId }: { details: LearningSubjectDetails; nodes: LearningJourneyNode[]; selectedLessonId?: string }) {
   const lessons = new Map(details.lessons.map((lesson) => [lesson.id, lesson]));
   const selected = selectedLessonId ? lessons.get(selectedLessonId) : undefined;
   return <div className="journey-page -m-4 min-h-[calc(100vh-80px)] overflow-hidden bg-[#170b35] text-white sm:-m-6 lg:-m-8">
     <header className="relative min-h-72 overflow-hidden border-b border-white/10">
-      <Image src="/images/basira/subject-hero-spectrum-v1.png" alt="رحلة تعلم بصيرة" fill priority sizes="100vw" className="object-cover opacity-65"/>
+      <Image src={subjectCoverPath(details.subject)} alt={`رحلة تعلم ${details.subject.title}`} fill priority sizes="100vw" className="object-cover opacity-65"/>
       <div className="absolute inset-0 bg-[#170b35]/45"/>
       <div className="relative flex min-h-72 flex-col justify-end p-7 sm:p-10"><span className="text-sm font-bold text-[#57e3d2]">رحلة {details.subject.title}</span><h1 className="font-heading mt-2 text-3xl font-bold sm:text-4xl">خطوات صغيرة تبني فهمًا كبيرًا</h1><p className="mt-3 max-w-xl text-white/70">اتبع المسار بالترتيب، وارجع لأي درس متاح عندما تحتاج إلى المراجعة.</p></div>
     </header>

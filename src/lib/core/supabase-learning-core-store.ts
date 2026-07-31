@@ -4,6 +4,7 @@ import type {
   LearningJourneyNode,
   LearningSubject,
   LearningSubjectDetails,
+  SubjectCoverKey,
   PlatformSettings,
   RevealedStudentEnrollmentReference,
   StudentEnrollmentReference,
@@ -22,6 +23,7 @@ import {
   normalizeEnrollmentReference,
 } from "./enrollment-reference";
 import type { LearningCoreStore } from "./contracts";
+import { inferSubjectCoverKey, isSubjectCoverKey } from "@/lib/subject-covers";
 
 type Row = Record<string, unknown>;
 const optionalString = (value: unknown) => value == null ? undefined : String(value);
@@ -29,7 +31,8 @@ const optionalString = (value: unknown) => value == null ? undefined : String(va
 function subjectFrom(row: Row): LearningSubject {
   return {
     id: String(row.id), teacherId: String(row.owner_teacher_id), title: String(row.title),
-    description: optionalString(row.description), bannerTitle: optionalString(row.banner_title),
+    description: optionalString(row.description), coverKey: isSubjectCoverKey(row.cover_key) ? row.cover_key : undefined,
+    bannerTitle: optionalString(row.banner_title),
     bannerBody: optionalString(row.banner_body), bannerCtaLabel: optionalString(row.banner_cta_label),
     bannerCtaPath: optionalString(row.banner_cta_path), status: String(row.status) as LearningSubject["status"],
     displayOrder: Number(row.display_order), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
@@ -194,7 +197,8 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     if (countError) throw countError;
     const { data, error } = await client.from("subjects").insert({
       group_id: null, owner_teacher_id: identity.userId, title: input.title.trim(),
-      description: input.description?.trim() || null, display_order: (count ?? 0) + 1, status: "draft",
+      description: input.description?.trim() || null, cover_key: inferSubjectCoverKey(input.title),
+      display_order: (count ?? 0) + 1, status: "draft",
     }).select("*").single();
     if (error) throw error;
     return subjectFrom(data as Row);
@@ -206,6 +210,12 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
       banner_title: input.title?.trim() || null, banner_body: input.body?.trim() || null,
       banner_cta_label: input.ctaLabel?.trim() || null, banner_cta_path: input.ctaPath?.trim() || null,
     }).eq("id", input.subjectId);
+    if (error) throw error;
+  }
+
+  async updateSubjectCover(identity: Identity, input: { subjectId: string; coverKey: SubjectCoverKey }): Promise<void> {
+    const { client } = await this.subjectForWrite(identity, input.subjectId);
+    const { error } = await client.from("subjects").update({ cover_key: input.coverKey }).eq("id", input.subjectId);
     if (error) throw error;
   }
 

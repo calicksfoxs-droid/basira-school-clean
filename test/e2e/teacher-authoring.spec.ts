@@ -21,6 +21,27 @@ test("teacher can create a subject and reach its authoring workspace", async ({ 
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 });
 
+test("teacher gets a relevant cover automatically and can replace it persistently", async ({ page }) => {
+  await loginAsTeacher(page);
+  await page.goto("/app/teacher/subjects");
+
+  await page.locator('input[name="title"]').fill("الكيمياء المتقدمة");
+  await page.locator("form").filter({ has: page.locator('input[name="title"]') }).getByRole("button").click();
+  await expect(page).toHaveURL(/\/app\/teacher\/subjects\/[0-9a-f-]{36}$/);
+
+  const hero = page.getByTestId("subject-hero-cover");
+  await expect(hero).toHaveAttribute("src", /subject-chemistry-v1\.webp/);
+  await page.getByText("الأحياء", { exact: true }).click();
+  await expect(page.getByRole("radio", { name: /الأحياء/ })).toBeChecked();
+  await page.getByRole("button", { name: "حفظ الغلاف الجديد" }).click();
+  await expect(page.getByText("تم حفظ غلاف المادة وظهر للطلاب")).toBeVisible();
+  await expect(hero).toHaveAttribute("src", /subject-biology-v1\.webp/);
+
+  await page.reload();
+  await expect(page.getByTestId("subject-hero-cover")).toHaveAttribute("src", /subject-biology-v1\.webp/);
+  await expect(page.getByRole("radio", { name: /الأحياء/ })).toBeChecked();
+});
+
 test("teacher can build a unit, group, lesson, and attach a PDF", async ({ page }) => {
   await loginAsTeacher(page);
   await page.goto("/app/teacher/subjects");

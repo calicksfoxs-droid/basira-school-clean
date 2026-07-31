@@ -3,6 +3,7 @@ import {
   createLearningSubjectSchema,
   enrollStudentSchema,
   updateSubjectBannerSchema,
+  updateSubjectCoverSchema,
   userPreferencesSchema,
 } from "@/domain/core-schemas";
 
@@ -16,6 +17,12 @@ describe("Basira core schemas", () => {
     expect(updateSubjectBannerSchema.safeParse({ subjectId, ctaLabel: "ابدأ" }).success).toBe(false);
     expect(updateSubjectBannerSchema.safeParse({ subjectId, ctaLabel: "ابدأ", ctaPath: "https://example.com" }).success).toBe(false);
     expect(updateSubjectBannerSchema.safeParse({ subjectId, ctaLabel: "ابدأ", ctaPath: "/app/student/subjects/1" }).success).toBe(true);
+  });
+
+  it("accepts only built-in subject covers", () => {
+    const subjectId = "10000000-0000-4000-8000-000000000001";
+    expect(updateSubjectCoverSchema.safeParse({ subjectId, coverKey: "chemistry" }).success).toBe(true);
+    expect(updateSubjectCoverSchema.safeParse({ subjectId, coverKey: "uploaded-file" }).success).toBe(false);
   });
 
   it("accepts only the independent enrollment-reference format", () => {

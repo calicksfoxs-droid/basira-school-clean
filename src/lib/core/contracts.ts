@@ -4,6 +4,7 @@ import type {
   LearningJourneyNode,
   LearningSubject,
   LearningSubjectDetails,
+  SubjectCoverKey,
   PlatformSettings,
   RevealedStudentEnrollmentReference,
   StudentEnrollmentReference,
@@ -18,6 +19,7 @@ export interface LearningCoreStore {
   getLearningSubject(identity: Identity, subjectId: string): Promise<LearningSubjectDetails>;
   createLearningSubject(identity: Identity, input: { title: string; description?: string }): Promise<LearningSubject>;
   updateSubjectBanner(identity: Identity, input: { subjectId: string; title?: string; body?: string; ctaLabel?: string; ctaPath?: string }): Promise<void>;
+  updateSubjectCover(identity: Identity, input: { subjectId: string; coverKey: SubjectCoverKey }): Promise<void>;
   createSubjectGroup(identity: Identity, input: { subjectId: string; name: string; description?: string }): Promise<SubjectGroup>;
   createSubjectUnit(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<SubjectUnit>;
   createUnitLesson(identity: Identity, input: { unitId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<UnitLesson>;
