@@ -31,7 +31,7 @@ export function isSubjectCoverKey(value: unknown): value is SubjectCoverKey {
 
 export function inferSubjectCoverKey(title: string): SubjectCoverKey {
   const value = title.trim().toLowerCase();
-  if (/كيمياء|كيميا|chem/.test(value)) return "chemistry";
+  if (/كيمياء|كيميا|كمياء|chem/.test(value)) return "chemistry";
   if (/فيزياء|طبيعة|physics/.test(value)) return "physics";
   if (/أحياء|احياء|بيولوج|biology/.test(value)) return "biology";
   if (/رياضيات|رياضة|حساب|جبر|هندس|math/.test(value)) return "mathematics";

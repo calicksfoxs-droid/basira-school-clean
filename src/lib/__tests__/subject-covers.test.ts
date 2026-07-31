@@ -4,6 +4,7 @@ import { inferSubjectCoverKey, subjectCoverPath, SUBJECT_COVERS } from "@/lib/su
 describe("subject cover library", () => {
   it.each([
     ["الكيمياء العضوية", "chemistry"],
+    ["كمياء", "chemistry"],
     ["فيزياء الصف الثالث", "physics"],
     ["الأحياء", "biology"],
     ["الرياضيات المتقدمة", "mathematics"],
