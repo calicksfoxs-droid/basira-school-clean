@@ -63,6 +63,40 @@ export class SupabaseStore implements BasiraStore {
   private async client() { return createServerSupabaseClient(); }
   private admin() { return createAdminSupabaseClient(); }
 
+  private async groupForWrite(identity: Identity, groupId: string) {
+    assertAllowed(identity.role === "admin" || identity.role === "teacher");
+    const client = this.admin();
+    const { data, error } = await client.from("groups").select("*").eq("id", groupId).single();
+    if (error) throw error;
+    const group = groupFrom(data as Record<string, unknown>);
+    if (identity.role === "teacher") assertAllowed(group.ownerTeacherId === identity.userId);
+    return { client, group };
+  }
+
+  private async subjectForAccess(identity: Identity, subjectId: string) {
+    const client = this.admin();
+    const { data, error } = await client.from("subjects").select("*").eq("id", subjectId).single();
+    if (error) throw error;
+    const subject = subjectFrom(data as Record<string, unknown>);
+    if (identity.role === "teacher") {
+      assertAllowed(subject.ownerTeacherId === identity.userId);
+    } else if (identity.role === "student") {
+      assertAllowed(subject.status === "active" || subject.status === "published");
+      let groupQuery = client.from("groups").select("id").eq("status", "active");
+      groupQuery = subject.groupId ? groupQuery.eq("id", subject.groupId) : groupQuery.eq("subject_id", subject.id);
+      const { data: groups, error: groupError } = await groupQuery;
+      if (groupError) throw groupError;
+      const groupIds = ((groups ?? []) as Array<Record<string, unknown>>).map((row) => String(row.id));
+      assertAllowed(groupIds.length > 0);
+      const { count, error: membershipError } = await client.from("group_memberships")
+        .select("id", { count: "exact", head: true }).eq("student_id", identity.userId)
+        .eq("status", "active").in("group_id", groupIds);
+      if (membershipError) throw membershipError;
+      assertAllowed((count ?? 0) > 0);
+    }
+    return { client, subject };
+  }
+
   async getDashboard(identity: Identity): Promise<DashboardSummary> {
     const groups = await this.listGroups(identity);
     const announcements = (await this.listAnnouncements(identity)).slice(0, 5);
@@ -144,7 +178,7 @@ export class SupabaseStore implements BasiraStore {
     const created = await this.createAccount(identity, "student", input);
     if (input.groupId) {
       await this.addStudentToGroup(identity, input.groupId, created.user.id);
-      if (identity.role === "teacher") await this.upsertPrivateRecord(identity, { studentId: created.user.id, groupId: input.groupId, contactNumber: input.contactNumber, amountNote: input.amountNote, paymentNote: input.paymentNote });
+      if (identity.role === "teacher") await this.upsertPrivateRecord(identity, { studentId: created.user.id, groupId: input.groupId, contactNumber: input.contactNumber });
     }
     return created;
   }
@@ -181,21 +215,20 @@ export class SupabaseStore implements BasiraStore {
     const syntheticEmail = `basira.${generated.publicRef.toLowerCase()}@access.invalid`;
     const admin = this.admin();
     const timestamp = iso();
-    const { data: previousCredential, error: previousError } = await admin
+    const { data: previousCredentials, error: previousError } = await admin
       .from("access_credentials")
       .select("id,state,disabled_at")
       .eq("auth_user_id", userId)
-      .neq("state", "disabled")
-      .maybeSingle();
+      .neq("state", "disabled");
     if (previousError) throw previousError;
 
     const { error: profileError } = await admin.from("profiles").update({ session_invalid_before: timestamp }).eq("id", userId);
     if (profileError) throw profileError;
 
-    if (previousCredential) {
-      const { error } = await admin.from("access_credentials").update({ state: "disabled", disabled_at: timestamp }).eq("id", previousCredential.id);
-      if (error) throw error;
-    }
+    const { error: disableError } = await admin.from("access_credentials")
+      .update({ state: "disabled", disabled_at: timestamp })
+      .eq("auth_user_id", userId).neq("state", "disabled");
+    if (disableError) throw disableError;
     const { data: newCredential, error: credentialError } = await admin.from("access_credentials").insert({
       auth_user_id: userId,
       public_account_ref: generated.publicRef,
@@ -207,14 +240,18 @@ export class SupabaseStore implements BasiraStore {
       last_reset_at: timestamp,
     }).select("id").single();
     if (credentialError) {
-      if (previousCredential) await admin.from("access_credentials").update({ state: previousCredential.state, disabled_at: previousCredential.disabled_at }).eq("id", previousCredential.id);
+      for (const previous of previousCredentials ?? []) {
+        await admin.from("access_credentials").update({ state: previous.state, disabled_at: previous.disabled_at }).eq("id", previous.id);
+      }
       throw credentialError;
     }
 
     const { error: authError } = await admin.auth.admin.updateUserById(userId, { email: syntheticEmail, password: generated.secret, email_confirm: true });
     if (authError) {
       await admin.from("access_credentials").delete().eq("id", newCredential.id);
-      if (previousCredential) await admin.from("access_credentials").update({ state: previousCredential.state, disabled_at: previousCredential.disabled_at }).eq("id", previousCredential.id);
+      for (const previous of previousCredentials ?? []) {
+        await admin.from("access_credentials").update({ state: previous.state, disabled_at: previous.disabled_at }).eq("id", previous.id);
+      }
       throw authError;
     }
     return { user: { ...user, syntheticEmail, sessionInvalidBefore: timestamp }, code: generated.code };
@@ -249,7 +286,9 @@ export class SupabaseStore implements BasiraStore {
       identity.role === "student" ? Promise.resolve({ data: null, error: null }) : client.from("profiles").select("id,display_name,role,status,created_by,created_at").eq("id", group.ownerTeacherId).maybeSingle(),
       client.from("group_memberships").select("student_id").eq("group_id", groupId).eq("status", "active"),
       client.from("subjects").select("*").eq("group_id", groupId).order("display_order"),
-      identity.role === "student" ? Promise.resolve({ data: [], error: null }) : client.from("teacher_student_private_records").select("*").eq("group_id", groupId),
+      identity.role === "teacher"
+        ? client.from("teacher_student_private_records").select("id,teacher_id,student_id,group_id,contact_number,updated_at").eq("group_id", groupId)
+        : Promise.resolve({ data: [], error: null }),
     ]);
     if (ownerRes.error || membershipRes.error || subjectRes.error || privateRes.error) throw ownerRes.error ?? membershipRes.error ?? subjectRes.error ?? privateRes.error;
     const studentIds = ((membershipRes.data ?? []) as Array<Record<string, unknown>>).map((r) => String(r.student_id));
@@ -260,7 +299,7 @@ export class SupabaseStore implements BasiraStore {
       owner: ownerRes.data ? userFrom(ownerRes.data as Record<string, unknown>) : undefined,
       students: ((studentData ?? []) as Array<Record<string, unknown>>).map(userFrom),
       subjects: ((subjectRes.data ?? []) as Array<Record<string, unknown>>).map(subjectFrom),
-      privateRecords: ((privateRes.data ?? []) as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), teacherId: String(row.teacher_id), studentId: String(row.student_id), groupId: String(row.group_id), contactNumber: row.contact_number ? String(row.contact_number) : undefined, amountNote: row.amount_note ? String(row.amount_note) : undefined, paymentNote: row.payment_note ? String(row.payment_note) : undefined, updatedAt: String(row.updated_at) })),
+      privateRecords: ((privateRes.data ?? []) as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), teacherId: String(row.teacher_id), studentId: String(row.student_id), groupId: String(row.group_id), contactNumber: row.contact_number ? String(row.contact_number) : undefined, updatedAt: String(row.updated_at) })),
     };
   }
 
@@ -268,7 +307,11 @@ export class SupabaseStore implements BasiraStore {
     assertAllowed(identity.role === "admin" || identity.role === "teacher");
     const ownerTeacherId = identity.role === "teacher" ? identity.userId : input.ownerTeacherId;
     assertAllowed(Boolean(ownerTeacherId), "اختر المعلم المسؤول");
-    const client = await this.client();
+    const client = this.admin();
+    const { data: owner, error: ownerError } = await client.from("profiles")
+      .select("id").eq("id", ownerTeacherId).eq("role", "teacher").eq("status", "active").maybeSingle();
+    if (ownerError) throw ownerError;
+    assertFound(owner, "المعلم المسؤول غير متاح");
     const { data, error } = await client.from("groups").insert({ name: input.name, description: input.description || null, owner_teacher_id: ownerTeacherId, status: "active", created_by: identity.userId }).select("*").single();
     if (error) throw error;
     return groupFrom(data as Record<string, unknown>);
@@ -282,34 +325,29 @@ export class SupabaseStore implements BasiraStore {
   }
 
   async addStudentToGroup(identity: Identity, groupId: string, studentId: string) {
-    const client = await this.client();
+    const { client } = await this.groupForWrite(identity, groupId);
     const { error } = await client.from("group_memberships").upsert({ group_id: groupId, student_id: studentId, status: "active" }, { onConflict: "group_id,student_id" });
     if (error) throw error;
   }
 
   async upsertPrivateRecord(identity: Identity, input: Omit<PrivateStudentRecord, "id" | "teacherId" | "updatedAt">) {
-    assertAllowed(identity.role === "teacher" || identity.role === "admin");
-    const group = await this.getGroup(identity, input.groupId);
-    const teacherId = identity.role === "teacher" ? identity.userId : group.group.ownerTeacherId;
-    const client = await this.client();
-    const { error } = await client.from("teacher_student_private_records").upsert({ teacher_id: teacherId, student_id: input.studentId, group_id: input.groupId, contact_number: input.contactNumber || null, amount_note: input.amountNote || null, payment_note: input.paymentNote || null }, { onConflict: "teacher_id,student_id,group_id" });
+    const { client, group } = await this.groupForWrite(identity, input.groupId);
+    const teacherId = identity.role === "teacher" ? identity.userId : group.ownerTeacherId;
+    const { error } = await client.from("teacher_student_private_records").upsert({ teacher_id: teacherId, student_id: input.studentId, group_id: input.groupId, contact_number: input.contactNumber || null }, { onConflict: "teacher_id,student_id,group_id" });
     if (error) throw error;
   }
 
   async createSubject(identity: Identity, input: { groupId: string; title: string; description?: string }): Promise<Subject> {
     assertAllowed(identity.role === "teacher");
-    const client = await this.client();
+    const { client, group } = await this.groupForWrite(identity, input.groupId);
     const { count } = await client.from("subjects").select("id", { count: "exact", head: true }).eq("group_id", input.groupId);
-    const { data, error } = await client.from("subjects").insert({ group_id: input.groupId, title: input.title, description: input.description || null, display_order: (count ?? 0) + 1, status: "active" }).select("*").single();
+    const { data, error } = await client.from("subjects").insert({ group_id: input.groupId, owner_teacher_id: group.ownerTeacherId, title: input.title, description: input.description || null, display_order: (count ?? 0) + 1, status: "active" }).select("*").single();
     if (error) throw error;
     return subjectFrom(data as Record<string, unknown>);
   }
 
   async getSubject(identity: Identity, subjectId: string): Promise<SubjectDetails> {
-    const client = await this.client();
-    const { data: subjectData, error } = await client.from("subjects").select("*").eq("id", subjectId).single();
-    if (error) throw error;
-    const subject = subjectFrom(subjectData as Record<string, unknown>);
+    const { client, subject } = await this.subjectForAccess(identity, subjectId);
     const groupResult = subject.groupId
       ? await client.from("groups").select("*").eq("id", subject.groupId).single()
       : { data: null, error: null };
@@ -320,7 +358,7 @@ export class SupabaseStore implements BasiraStore {
 
   async createLesson(identity: Identity, input: { subjectId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<Lesson> {
     assertAllowed(identity.role === "teacher");
-    const client = await this.client();
+    const { client } = await this.subjectForAccess(identity, input.subjectId);
     const { count } = await client.from("lessons").select("id", { count: "exact", head: true }).eq("subject_id", input.subjectId);
     const { data, error } = await client.from("lessons").insert({ subject_id: input.subjectId, title: input.title, description: input.description || null, structure_mode: input.structureMode, display_order: (count ?? 0) + 1, status: "draft" }).select("*").single();
     if (error) throw error;
@@ -332,7 +370,7 @@ export class SupabaseStore implements BasiraStore {
     const details = await this.getLesson(identity, input.lessonId);
     assertAllowed(details.lesson.structureMode === "parts", "هذا الدرس لا يستخدم الأجزاء");
     assertAllowed(details.lesson.status === "draft", "لا يمكن إضافة جزء بعد نشر الدرس");
-    const client = await this.client();
+    const client = this.admin();
     const { count } = await client.from("lesson_parts").select("id", { count: "exact", head: true }).eq("lesson_id", input.lessonId);
     const { data, error } = await client.from("lesson_parts").insert({ lesson_id: input.lessonId, title: input.title, description: input.description || null, display_order: (count ?? 0) + 1 }).select("*").single();
     if (error) throw error;
@@ -341,7 +379,7 @@ export class SupabaseStore implements BasiraStore {
   }
 
   async getLesson(identity: Identity, lessonId: string): Promise<LessonDetails> {
-    const client = await this.client();
+    const client = this.admin();
     const { data: lessonData, error } = await client.from("lessons").select("*").eq("id", lessonId).single();
     if (error) throw error;
     const lesson = lessonFrom(lessonData as Record<string, unknown>);
@@ -390,7 +428,7 @@ export class SupabaseStore implements BasiraStore {
         assertAllowed(hasContent, `أضف محتوى جاهزًا إلى الجزء: ${part.title}`);
       }
     }
-    const client = await this.client();
+    const client = this.admin();
     const { error } = await client.from("lessons").update({ status: "published", published_at: iso() }).eq("id", lessonId);
     if (error) throw error;
   }

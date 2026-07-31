@@ -10,6 +10,7 @@ import type { CreateStudentRevealState, CreateTeacherRevealState } from "@/actio
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import type { Group } from "@/domain/models";
+import { saveTeacherFinanceNote } from "@/lib/teacher-finance-local";
 
 export function CreateTeacherForm({ returnTo }: { returnTo: string }) {
   const initialState: CreateTeacherRevealState = { ok: true, data: undefined as never };
@@ -66,11 +67,14 @@ export function CreateTeacherForm({ returnTo }: { returnTo: string }) {
   </>;
 }
 
-export function CreateStudentForm({ groups, returnTo, fixedGroupId }: { groups: Group[]; returnTo: string; fixedGroupId?: string }) {
+export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }: { groups: Group[]; returnTo: string; fixedGroupId?: string; teacherId?: string }) {
   const initialCreateStudentRevealState: CreateStudentRevealState = { ok: true, data: undefined as never };
   const [state, action, pending] = useActionState(createStudentWithRevealAction, initialCreateStudentRevealState);
   const [dismissedCode, setDismissedCode] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const pendingFinance = useRef<{ groupId: string; amount: string; note: string } | undefined>(undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const revealed = state.ok && state.data ? state.data : undefined;
@@ -78,9 +82,25 @@ export function CreateStudentForm({ groups, returnTo, fixedGroupId }: { groups: 
 
   useEffect(() => {
     if (!shouldReveal || !dialogRef.current || dialogRef.current.open) return;
+    if (teacherId && revealed?.studentId && pendingFinance.current) {
+      saveTeacherFinanceNote(teacherId, pendingFinance.current.groupId, revealed.studentId, {
+        amount: pendingFinance.current.amount,
+        note: pendingFinance.current.note,
+      });
+      pendingFinance.current = undefined;
+      setAmount("");
+      setPaymentNote("");
+    }
     formRef.current?.reset();
     dialogRef.current.showModal();
-  }, [shouldReveal]);
+  }, [revealed?.studentId, shouldReveal, teacherId]);
+
+  function rememberLocalFinance(event: React.FormEvent<HTMLFormElement>) {
+    if (!teacherId) return;
+    const formData = new FormData(event.currentTarget);
+    const selectedGroup = fixedGroupId || String(formData.get("groupId") ?? "");
+    pendingFinance.current = { groupId: selectedGroup, amount, note: paymentNote };
+  }
 
   function closeReveal() {
     if (revealed) setDismissedCode(revealed.code);
@@ -95,12 +115,17 @@ export function CreateStudentForm({ groups, returnTo, fixedGroupId }: { groups: 
   }
 
   return <>
-    <form ref={formRef} action={action} className="grid gap-5">
+    <form ref={formRef} action={action} onSubmit={rememberLocalFinance} className="grid gap-5">
       <input type="hidden" name="returnTo" value={returnTo}/>
       <Field label="اسم الطالب"><Input name="displayName" required/></Field>
       {fixedGroupId ? <input type="hidden" name="groupId" value={fixedGroupId}/> : <Field label="المجموعة"><Select name="groupId" required defaultValue=""><option value="" disabled>اختر المجموعة</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</Select></Field>}
-      <div className="grid gap-4 sm:grid-cols-2"><Field label="رقم التواصل" hint="خاص بالمعلم والإدارة"><Input name="contactNumber" dir="ltr"/></Field><Field label="المبلغ / الحالة" hint="ملاحظة داخلية فقط"><Input name="amountNote"/></Field></div>
-      <Field label="ملاحظة خاصة"><Textarea name="paymentNote"/></Field>
+      {teacherId && <><Field label="رقم التواصل" hint="خاص بالمعلم ولا يظهر للطالب"><Input name="contactNumber" dir="ltr"/></Field><div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 p-4">
+        <p className="mb-4 text-xs font-bold leading-6 text-amber-900">المتابعة المالية خاصة بك: تُحفظ داخل هذا المتصفح فقط، ولا تُرسل إلى الخادم أو Supabase ولا تظهر للمدير.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="المبلغ / الحالة" hint="محلي على هذا الجهاز"><Input value={amount} onChange={(event) => setAmount(event.target.value)} maxLength={80}/></Field>
+          <Field label="ملاحظة مالية خاصة" hint="محلية على هذا الجهاز"><Textarea value={paymentNote} onChange={(event) => setPaymentNote(event.target.value)} maxLength={300}/></Field>
+        </div>
+      </div></>}
       {!state.ok && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{state.error}</p>}
       <Button disabled={pending}>{pending ? "جارٍ إنشاء الطالب…" : "إنشاء الطالب وإصدار الرمز"}</Button>
     </form>

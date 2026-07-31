@@ -70,8 +70,6 @@ export async function createStudentAction(formData: FormData) {
       displayName: formText(formData, "displayName"),
       groupId: formText(formData, "groupId") || undefined,
       contactNumber: formText(formData, "contactNumber") || undefined,
-      amountNote: formText(formData, "amountNote") || undefined,
-      paymentNote: formText(formData, "paymentNote") || undefined,
     });
     const created = await (await getStore()).createStudent(identity, parsed);
     await setAccessCodeFlash(created.code, created.user.displayName);
@@ -86,6 +84,7 @@ export async function createStudentAction(formData: FormData) {
 export type CreateStudentRevealState = ActionResult<{
   code: string;
   displayName: string;
+  studentId: string;
 }>;
 
 export type ResetAccessCodeRevealState = ActionResult<{
@@ -110,15 +109,13 @@ export async function createStudentWithRevealAction(
       displayName: formText(formData, "displayName"),
       groupId: formText(formData, "groupId") || undefined,
       contactNumber: formText(formData, "contactNumber") || undefined,
-      amountNote: formText(formData, "amountNote") || undefined,
-      paymentNote: formText(formData, "paymentNote") || undefined,
     });
     const created = await (await getStore()).createStudent(identity, parsed);
     revalidatePath(path);
 
     return {
       ok: true,
-      data: { code: created.code, displayName: created.user.displayName },
+      data: { code: created.code, displayName: created.user.displayName, studentId: created.user.id },
       message: "تم إنشاء الطالب وإصدار رمز الدخول",
     };
   } catch (error) {

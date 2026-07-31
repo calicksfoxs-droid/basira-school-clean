@@ -12,7 +12,8 @@ import type {
   UnitLesson,
   UserPreferences,
 } from "@/domain/core-models";
-import { assertAllowed, assertFound } from "@/lib/data/errors";
+import { AppError, assertAllowed, assertFound } from "@/lib/data/errors";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   fingerprintEnrollmentReference,
@@ -85,17 +86,87 @@ function preferencesFrom(row: Row): UserPreferences {
 
 export class SupabaseLearningCoreStore implements LearningCoreStore {
   private async client() { return createServerSupabaseClient(); }
+  private admin() { return createAdminSupabaseClient(); }
+
+  private async subjectForWrite(identity: Identity, subjectId: string) {
+    assertAllowed(identity.role === "admin" || identity.role === "teacher");
+    const client = this.admin();
+    const { data, error } = await client.from("subjects")
+      .select("id,owner_teacher_id,group_id,status").eq("id", subjectId).single();
+    if (error) throw error;
+    const subject = data as Row;
+    if (identity.role === "teacher") {
+      assertAllowed(String(subject.owner_teacher_id) === identity.userId);
+    }
+    return { client, subject };
+  }
+
+  private async unitForWrite(identity: Identity, unitId: string) {
+    const client = this.admin();
+    const { data, error } = await client.from("subject_units")
+      .select("id,subject_id,status").eq("id", unitId).single();
+    if (error) throw error;
+    const unit = data as Row;
+    await this.subjectForWrite(identity, String(unit.subject_id));
+    return { client, unit };
+  }
+
+  private async lessonForWrite(identity: Identity, lessonId: string) {
+    const client = this.admin();
+    const { data, error } = await client.from("lessons")
+      .select("id,subject_id,unit_id,status").eq("id", lessonId).single();
+    if (error) throw error;
+    const lesson = data as Row;
+    await this.subjectForWrite(identity, String(lesson.subject_id));
+    return { client, lesson };
+  }
+
+  private async assertSubjectReadable(identity: Identity, subject: Row) {
+    assertAllowed(identity.status === "active");
+    if (identity.role === "admin") return;
+    if (identity.role === "teacher") {
+      assertAllowed(String(subject.owner_teacher_id) === identity.userId);
+      return;
+    }
+
+    const subjectId = String(subject.id);
+    const groupId = subject.group_id ? String(subject.group_id) : undefined;
+    const status = String(subject.status);
+    assertAllowed(groupId ? status === "active" : status === "published");
+    const client = this.admin();
+    let groupQuery = client.from("groups").select("id").eq("status", "active");
+    groupQuery = groupId ? groupQuery.eq("id", groupId) : groupQuery.eq("subject_id", subjectId);
+    const { data: groups, error: groupError } = await groupQuery;
+    if (groupError) throw groupError;
+    const groupIds = ((groups ?? []) as Row[]).map((row) => String(row.id));
+    assertAllowed(groupIds.length > 0);
+    const { count, error } = await client.from("group_memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", identity.userId).eq("status", "active").in("group_id", groupIds);
+    if (error) throw error;
+    assertAllowed((count ?? 0) > 0);
+  }
 
   async listLearningSubjects(identity: Identity): Promise<LearningSubject[]> {
     assertAllowed(identity.status === "active");
-    const client = await this.client();
+    const client = this.admin();
     const { data, error } = await client.from("subjects").select("*").order("display_order");
     if (error) throw error;
-    return ((data ?? []) as Row[]).map(subjectFrom);
+    const visible: LearningSubject[] = [];
+    for (const row of (data ?? []) as Row[]) {
+      try {
+        await this.assertSubjectReadable(identity, row);
+        visible.push(subjectFrom(row));
+      } catch (error) {
+        if (error instanceof AppError && error.code === "FORBIDDEN") continue;
+        throw error;
+      }
+    }
+    return visible;
   }
 
-  async getLearningSubject(_identity: Identity, subjectId: string): Promise<LearningSubjectDetails> {
-    const client = await this.client();
+  async getLearningSubject(identity: Identity, subjectId: string): Promise<LearningSubjectDetails> {
+    const client = this.admin();
     const [subjectResult, groupResult, unitResult, lessonResult] = await Promise.all([
       client.from("subjects").select("*").eq("id", subjectId).single(),
       client.from("groups").select("*").eq("subject_id", subjectId).order("created_at"),
@@ -103,6 +174,7 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
       client.from("lessons").select("*").eq("subject_id", subjectId).order("display_order"),
     ]);
     if (subjectResult.error) throw subjectResult.error;
+    await this.assertSubjectReadable(identity, subjectResult.data as Row);
     if (groupResult.error) throw groupResult.error;
     if (unitResult.error) throw unitResult.error;
     if (lessonResult.error) throw lessonResult.error;
@@ -116,7 +188,7 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
 
   async createLearningSubject(identity: Identity, input: { title: string; description?: string }): Promise<LearningSubject> {
     assertAllowed(identity.role === "teacher");
-    const client = await this.client();
+    const client = this.admin();
     const { count, error: countError } = await client.from("subjects")
       .select("id", { count: "exact", head: true }).eq("owner_teacher_id", identity.userId);
     if (countError) throw countError;
@@ -128,8 +200,8 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return subjectFrom(data as Row);
   }
 
-  async updateSubjectBanner(_identity: Identity, input: { subjectId: string; title?: string; body?: string; ctaLabel?: string; ctaPath?: string }): Promise<void> {
-    const client = await this.client();
+  async updateSubjectBanner(identity: Identity, input: { subjectId: string; title?: string; body?: string; ctaLabel?: string; ctaPath?: string }): Promise<void> {
+    const { client } = await this.subjectForWrite(identity, input.subjectId);
     const { error } = await client.from("subjects").update({
       banner_title: input.title?.trim() || null, banner_body: input.body?.trim() || null,
       banner_cta_label: input.ctaLabel?.trim() || null, banner_cta_path: input.ctaPath?.trim() || null,
@@ -138,10 +210,7 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
   }
 
   async createSubjectGroup(identity: Identity, input: { subjectId: string; name: string; description?: string }): Promise<SubjectGroup> {
-    const client = await this.client();
-    const { data: subject, error: subjectError } = await client.from("subjects")
-      .select("owner_teacher_id").eq("id", input.subjectId).single();
-    if (subjectError) throw subjectError;
+    const { client, subject } = await this.subjectForWrite(identity, input.subjectId);
     const ownerTeacherId = String((subject as Row).owner_teacher_id);
     const { data, error } = await client.from("groups").insert({
       subject_id: input.subjectId, owner_teacher_id: ownerTeacherId, created_by: identity.userId,
@@ -151,8 +220,8 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return groupFrom(data as Row);
   }
 
-  async createSubjectUnit(_identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<SubjectUnit> {
-    const client = await this.client();
+  async createSubjectUnit(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<SubjectUnit> {
+    const { client } = await this.subjectForWrite(identity, input.subjectId);
     const { data: last, error: orderError } = await client.from("subject_units")
       .select("display_order").eq("subject_id", input.subjectId)
       .order("display_order", { ascending: false }).limit(1);
@@ -166,11 +235,8 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return unitFrom(data as Row);
   }
 
-  async createUnitLesson(_identity: Identity, input: { unitId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<UnitLesson> {
-    const client = await this.client();
-    const { data: unit, error: unitError } = await client.from("subject_units")
-      .select("subject_id").eq("id", input.unitId).single();
-    if (unitError) throw unitError;
+  async createUnitLesson(identity: Identity, input: { unitId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<UnitLesson> {
+    const { client, unit } = await this.unitForWrite(identity, input.unitId);
     const { data: last, error: orderError } = await client.from("lessons")
       .select("display_order").eq("unit_id", input.unitId)
       .order("display_order", { ascending: false }).limit(1);
@@ -185,8 +251,8 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return lessonFrom(data as Row);
   }
 
-  async publishLearningSubject(_identity: Identity, subjectId: string): Promise<void> {
-    const client = await this.client();
+  async publishLearningSubject(identity: Identity, subjectId: string): Promise<void> {
+    const { client } = await this.subjectForWrite(identity, subjectId);
     const [groups, units] = await Promise.all([
       client.from("groups").select("id", { count: "exact", head: true }).eq("subject_id", subjectId).eq("status", "active"),
       client.from("subject_units").select("id", { count: "exact", head: true }).eq("subject_id", subjectId).eq("status", "published"),
@@ -197,16 +263,16 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     const { error } = await client.from("subjects").update({ status: "published" }).eq("id", subjectId);
     if (error) throw error;
   }
-  async publishSubjectUnit(_identity: Identity, unitId: string): Promise<void> {
-    const client = await this.client();
+  async publishSubjectUnit(identity: Identity, unitId: string): Promise<void> {
+    const { client } = await this.unitForWrite(identity, unitId);
     const { count, error: countError } = await client.from("lessons").select("id", { count: "exact", head: true }).eq("unit_id", unitId).eq("status", "published");
     if (countError) throw countError;
     assertAllowed((count ?? 0) > 0, "انشر درسًا واحدًا على الأقل قبل نشر الوحدة");
     const { error } = await client.from("subject_units").update({ status: "published" }).eq("id", unitId);
     if (error) throw error;
   }
-  async publishUnitLesson(_identity: Identity, lessonId: string): Promise<void> { const client = await this.client(); const { error } = await client.from("lessons").update({ status: "published", published_at: new Date().toISOString() }).eq("id", lessonId); if (error) throw error; }
-  async completeLearningLesson(identity: Identity, lessonId: string): Promise<void> { assertAllowed(identity.role === "student"); const client = await this.client(); const { data: lesson, error: lessonError } = await client.from("lessons").select("subject_id,status").eq("id", lessonId).single(); if (lessonError) throw lessonError; assertAllowed(String((lesson as Row).status) === "published"); const { error } = await client.from("learning_progress").upsert({ student_id: identity.userId, subject_id: String((lesson as Row).subject_id), lesson_id: lessonId, completed_at: new Date().toISOString() }, { onConflict: "student_id,lesson_id" }); if (error) throw error; }
+  async publishUnitLesson(identity: Identity, lessonId: string): Promise<void> { const { client } = await this.lessonForWrite(identity, lessonId); const { error } = await client.from("lessons").update({ status: "published", published_at: new Date().toISOString() }).eq("id", lessonId); if (error) throw error; }
+  async completeLearningLesson(identity: Identity, lessonId: string): Promise<void> { assertAllowed(identity.role === "student"); const client = this.admin(); const { data: lesson, error: lessonError } = await client.from("lessons").select("subject_id,status").eq("id", lessonId).single(); if (lessonError) throw lessonError; assertAllowed(String((lesson as Row).status) === "published"); const { data: subject, error: subjectError } = await client.from("subjects").select("*").eq("id", String((lesson as Row).subject_id)).single(); if (subjectError) throw subjectError; await this.assertSubjectReadable(identity, subject as Row); const { error } = await client.from("learning_progress").upsert({ student_id: identity.userId, subject_id: String((lesson as Row).subject_id), lesson_id: lessonId, completed_at: new Date().toISOString() }, { onConflict: "student_id,lesson_id" }); if (error) throw error; }
 
   async enrollStudentByReference(_identity: Identity, input: { groupId: string; enrollmentReference: string }): Promise<{ studentId: string; displayName: string }> {
     const client = await this.client();
@@ -274,15 +340,16 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return preferencesFrom(data as Row);
   }
 
-  async getLearningJourney(_identity: Identity, subjectId: string): Promise<LearningJourneyNode[]> {
-    const client = await this.client();
-    const { data: subject, error: subjectError } = await client.from("subjects").select("id").eq("id", subjectId).single();
+  async getLearningJourney(identity: Identity, subjectId: string): Promise<LearningJourneyNode[]> {
+    const client = this.admin();
+    const { data: subject, error: subjectError } = await client.from("subjects").select("*").eq("id", subjectId).single();
     if (subjectError) throw subjectError;
     assertFound(subject);
+    await this.assertSubjectReadable(identity, subject as Row);
     const [unitsResult, lessonsResult, progressResult] = await Promise.all([
       client.from("subject_units").select("id,display_order").eq("subject_id", subjectId).order("display_order"),
       client.from("lessons").select("id,unit_id,status,display_order").eq("subject_id", subjectId),
-      client.from("learning_progress").select("lesson_id").eq("student_id", _identity.userId).eq("subject_id", subjectId),
+      client.from("learning_progress").select("lesson_id").eq("student_id", identity.userId).eq("subject_id", subjectId),
     ]);
     if (unitsResult.error) throw unitsResult.error;
     if (lessonsResult.error) throw lessonsResult.error;

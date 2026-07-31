@@ -27,8 +27,6 @@ export interface CreateUserInput {
   displayName: string;
   groupId?: string;
   contactNumber?: string;
-  amountNote?: string;
-  paymentNote?: string;
 }
 
 export interface CreateQuestionInput {

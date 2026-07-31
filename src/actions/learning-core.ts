@@ -16,7 +16,6 @@ import type { ActionResult } from "@/lib/action-result";
 import { requireIdentity, requireRole } from "@/lib/auth";
 import { AppError } from "@/lib/data/errors";
 import { getLearningCoreStore } from "@/lib/core";
-import { getStore } from "@/lib/data";
 import type { RevealedStudentEnrollmentReference } from "@/domain/core-models";
 
 function text(formData: FormData, key: string) {
@@ -27,12 +26,24 @@ function text(formData: FormData, key: string) {
 function optional(value: string) { return value.trim() || undefined; }
 const idSchema = z.string().uuid();
 
+function databaseErrorSummary(error: unknown) {
+  if (error instanceof Error) return { name: error.name, message: error.message };
+  if (!error || typeof error !== "object") return { message: String(error) };
+  const candidate = error as Record<string, unknown>;
+  return {
+    code: typeof candidate.code === "string" ? candidate.code : undefined,
+    message: typeof candidate.message === "string" ? candidate.message : "Unknown database error",
+    details: typeof candidate.details === "string" ? candidate.details : undefined,
+    hint: typeof candidate.hint === "string" ? candidate.hint : undefined,
+  };
+}
+
 function failure(error: unknown): ActionResult<never> {
   if (error instanceof ZodError) {
     return { ok: false, error: "راجع البيانات المدخلة", fieldErrors: error.flatten().fieldErrors };
   }
   if (error instanceof AppError) return { ok: false, error: error.message };
-  console.error("Learning core action failed", error instanceof Error ? error.message : "Unknown error");
+  console.error("Learning core action failed", databaseErrorSummary(error));
   return { ok: false, error: "تعذر إتمام العملية. حاول مرة أخرى." };
 }
 
@@ -116,7 +127,7 @@ export async function publishLearningUnitAction(formData: FormData): Promise<Act
   try { const identity = await requireRole("admin", "teacher"); await getLearningCoreStore().publishSubjectUnit(identity, idSchema.parse(text(formData, "unitId"))); revalidatePath("/app"); return { ok: true, data: undefined, message: "تم نشر الوحدة" }; } catch (error) { return failure(error); }
 }
 export async function publishLearningLessonAction(formData: FormData): Promise<ActionResult> {
-  try { const identity = await requireRole("teacher"); await (await getStore()).publishLesson(identity, idSchema.parse(text(formData, "lessonId"))); revalidatePath("/app"); return { ok: true, data: undefined, message: "تم نشر الدرس" }; } catch (error) { return failure(error); }
+  try { const identity = await requireRole("teacher"); await getLearningCoreStore().publishUnitLesson(identity, idSchema.parse(text(formData, "lessonId"))); revalidatePath("/app"); return { ok: true, data: undefined, message: "تم نشر الدرس" }; } catch (error) { return failure(error); }
 }
 export async function completeLearningLessonAction(formData: FormData): Promise<ActionResult> {
   try { const identity = await requireRole("student"); await getLearningCoreStore().completeLearningLesson(identity, idSchema.parse(text(formData, "lessonId"))); revalidatePath("/app"); return { ok: true, data: undefined, message: "أحسنت! تم تسجيل إنجاز الدرس" }; } catch (error) { return failure(error); }

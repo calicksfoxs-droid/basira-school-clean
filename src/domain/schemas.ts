@@ -20,8 +20,6 @@ export const createUserSchema = z.object({
   displayName: nameSchema,
   groupId: z.string().uuid().optional(),
   contactNumber: z.string().trim().max(40).optional(),
-  amountNote: z.string().trim().max(80).optional(),
-  paymentNote: z.string().trim().max(300).optional(),
 });
 
 export const createSubjectSchema = z.object({

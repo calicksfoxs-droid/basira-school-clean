@@ -6,6 +6,12 @@ import { getStore } from "@/lib/data";
 import { createUploadToken } from "@/lib/upload-token";
 
 const allowedVideo = new Set(["video/mp4", "video/webm"]);
+const handoutExtensions = new Map([
+  ["application/pdf", "pdf"],
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"],
+]);
 export async function POST(request: Request) {
   try {
     const identity = await requireRole("teacher");
@@ -17,8 +23,10 @@ export async function POST(request: Request) {
     const maxMb = body.kind === "video" ? env.MAX_VIDEO_UPLOAD_MB : env.MAX_HANDOUT_UPLOAD_MB;
     if (body.sizeBytes > maxMb * 1024 * 1024) return NextResponse.json({ error: `حجم الملف يتجاوز ${maxMb} MB` }, { status: 400 });
     if (body.kind === "video" && !allowedVideo.has(body.mimeType)) return NextResponse.json({ error: "الفيديو يجب أن يكون MP4 أو WebM" }, { status: 400 });
-    if (body.kind === "handout" && body.mimeType !== "application/pdf") return NextResponse.json({ error: "الملزمة يجب أن تكون PDF" }, { status: 400 });
-    const extension = body.kind === "video" ? (body.mimeType === "video/webm" ? "webm" : "mp4") : "pdf";
+    if (body.kind === "handout" && !handoutExtensions.has(body.mimeType)) return NextResponse.json({ error: "الملف يجب أن يكون PDF أو صورة JPG/PNG/WebP" }, { status: 400 });
+    const extension = body.kind === "video"
+      ? (body.mimeType === "video/webm" ? "webm" : "mp4")
+      : handoutExtensions.get(body.mimeType)!;
     const bucket = body.kind === "video" ? "lesson-videos" : "lesson-handouts";
     const container = body.lessonPartId ?? "direct";
     // Legacy content is scoped by group; Learning Core content is scoped by its

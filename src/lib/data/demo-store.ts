@@ -139,8 +139,6 @@ export class DemoStore implements BasiraStore {
           studentId: created.user.id,
           groupId: input.groupId,
           contactNumber: input.contactNumber,
-          amountNote: input.amountNote,
-          paymentNote: input.paymentNote,
         });
       }
     }
@@ -201,7 +199,7 @@ export class DemoStore implements BasiraStore {
       owner: db.users.find((u) => u.id === group.ownerTeacherId),
       students: db.users.filter((u) => studentIds.has(u.id)),
       subjects: db.subjects.filter((s) => s.groupId === groupId).sort((a, b) => a.displayOrder - b.displayOrder),
-      privateRecords: identity.role === "student" ? [] : db.privateRecords.filter((r) => r.groupId === groupId && (identity.role === "admin" || r.teacherId === identity.userId)),
+      privateRecords: identity.role === "teacher" ? db.privateRecords.filter((r) => r.groupId === groupId && r.teacherId === identity.userId).map((record) => ({ ...record, amountNote: undefined, paymentNote: undefined })) : [],
     };
   }
 
