@@ -114,8 +114,13 @@ function seedDatabase(): DemoDatabase {
       { id: randomUUID(), createdBy: adminId, creatorRole: "admin", targetType: "global", title: "أهلًا بك في بصيرة", body: "منصة بسيطة تجمع دروسك وملفاتك واختباراتك في مكان واحد.", ctaLabel: "فتح الرئيسية", ctaPath: "/app", isActive: true, displayOrder: 1, createdAt: now() },
       { id: randomUUID(), createdBy: teacherId, creatorRole: "teacher", targetType: "group", groupId, title: "الاختبار التجريبي متاح", body: "افتح درس الحركة ثم ابدأ الاختبار عند الاستعداد.", ctaLabel: "فتح الدرس", ctaPath: `/app/student/lessons/${lessonId}`, isActive: true, displayOrder: 2, createdAt: now() },
     ],
+    curriculumGrades: [{
+      id: groupId, teacherId, title: "الصف الأول الثانوي", description: "صف تجريبي",
+      displayOrder: 1, status: "active", createdAt: now(), updatedAt: now(),
+    }],
     learningSubjects: [{
       id: subjectId, teacherId, title: "الفيزياء", description: "أساسيات الحركة",
+      gradeId: groupId,
       coverKey: "physics",
       bannerTitle: "ابدأ رحلتك في الفيزياء", bannerBody: "كل ما تحتاجه في مكان واحد.",
       status: "published", displayOrder: 1, createdAt: now(), updatedAt: now(),
@@ -129,7 +134,7 @@ function seedDatabase(): DemoDatabase {
     }],
     learningUnits: [{
       id: unitId, subjectId, title: "الحركة", description: "أساسيات الحركة والقوى",
-      displayOrder: 1, status: "published", createdAt: now(),
+      termSegment: 1, displayOrder: 1, status: "published", createdAt: now(),
     }],
     learningLessons: [{
       id: lessonId, unitId, subjectId, title: "الحركة في خط مستقيم",
@@ -152,13 +157,25 @@ function seedDatabase(): DemoDatabase {
 
 function withCoreDefaults(database: DemoDatabase): DemoDatabase {
   const legacy = database as DemoDatabase & Partial<Pick<DemoDatabase,
-    "learningSubjects" | "learningGroups" | "learningMemberships" | "learningUnits" |
+    "curriculumGrades" | "learningSubjects" | "learningGroups" | "learningMemberships" | "learningUnits" |
     "learningLessons" | "learningProgress" | "learningEnrollmentReferences" | "platformSettings" | "userPreferences"
   >>;
+  legacy.curriculumGrades ??= [];
   legacy.learningSubjects ??= [];
+  for (const subject of legacy.learningSubjects) {
+    if (!subject.gradeId) {
+      let fallback = legacy.curriculumGrades.find((grade) => grade.teacherId === subject.teacherId && grade.title === "صف غير مصنف");
+      if (!fallback) {
+        fallback = { id: randomUUID(), teacherId: subject.teacherId, title: "صف غير مصنف", displayOrder: legacy.curriculumGrades.length + 1, status: "active", createdAt: now(), updatedAt: now() };
+        legacy.curriculumGrades.push(fallback);
+      }
+      subject.gradeId = fallback.id;
+    }
+  }
   legacy.learningGroups ??= [];
   legacy.learningMemberships ??= [];
   legacy.learningUnits ??= [];
+  for (const unit of legacy.learningUnits) unit.termSegment ??= 1;
   legacy.learningLessons ??= [];
   legacy.learningProgress ??= [];
   legacy.learningEnrollmentReferences ??= [];

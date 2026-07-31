@@ -9,6 +9,7 @@ const codes = {
 } as const;
 
 const seededSubjectId = "20000000-0000-4000-8000-000000000001";
+const seededGradeId = "10000000-0000-4000-8000-000000000001";
 
 test.beforeAll(async () => {
   await rm(path.resolve(process.cwd(), ".data/e2e-db.json"), { force: true });
@@ -34,13 +35,13 @@ test.describe("الدخول وتوجيه الأدوار", () => {
     await login(page, "teacher");
     await expect(page.getByRole("heading", { name: /مرحبًا، أ\. أحمد/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "طلابي", exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "موادي", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "صفوفي", exact: true }).first()).toBeVisible();
   });
 
   test("يدخل الطالب إلى لوحته وتظهر روابطه الأساسية", async ({ page }) => {
     await login(page, "student");
     await expect(page.getByRole("heading", { name: /أهلًا يا سارة/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: "موادي", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "صفوفي", exact: true }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "رحلتي", exact: true }).first()).toBeVisible();
   });
 
@@ -86,19 +87,21 @@ test.describe("عزل صلاحيات الأدوار", () => {
 test.describe("المواد ورحلة التعلم", () => {
   test("يعرض للمعلم قائمة مواده ويفتح المادة التجريبية", async ({ page }) => {
     await login(page, "teacher");
-    await page.goto("/app/teacher/subjects");
-    await expect(page.getByRole("heading", { name: "موادي", exact: true })).toBeVisible();
+    await page.goto("/app/teacher/grades");
+    await expect(page.getByRole("heading", { name: "صفوفي", exact: true })).toBeVisible();
+    await page.locator(`a[href="/app/teacher/grades/${seededGradeId}"]`).click();
     await expect(page.getByRole("heading", { name: "الفيزياء", exact: true })).toBeVisible();
     await page.locator(`a[href="/app/teacher/subjects/${seededSubjectId}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/app/teacher/subjects/${seededSubjectId}$`));
     await expect(page.getByRole("heading", { name: "ابدأ رحلتك في الفيزياء" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "الوحدات والدروس" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "خطة المادة" })).toBeVisible();
   });
 
   test("يعرض للطالب مواده المسجل فيها فقط ويفتح تفاصيل المادة", async ({ page }) => {
     await login(page, "student");
-    await page.goto("/app/student/subjects");
-    await expect(page.getByRole("heading", { name: "موادي", exact: true })).toBeVisible();
+    await page.goto("/app/student/grades");
+    await expect(page.getByRole("heading", { name: "صفوفي", exact: true })).toBeVisible();
+    await page.locator(`a[href="/app/student/grades/${seededGradeId}"]`).click();
     await expect(page.getByRole("heading", { name: "الفيزياء", exact: true })).toBeVisible();
     await page.locator(`a[href="/app/student/subjects/${seededSubjectId}"]`).click();
     await expect(page.getByRole("heading", { name: "ابدأ رحلتك في الفيزياء" })).toBeVisible();
@@ -149,9 +152,9 @@ test("يعرض شريط التنقل السفلي بأربع وجهات على �
   await expect(nav.getByRole("link")).toHaveCount(4);
   await expect(nav.getByRole("link", { name: "الرئيسية", exact: true })).toHaveAttribute("aria-current", "page");
 
-  await nav.getByRole("link", { name: "موادي", exact: true }).click();
-  await expect(page).toHaveURL(/\/app\/student\/subjects$/);
-  await expect(nav.getByRole("link", { name: "موادي", exact: true })).toHaveAttribute("aria-current", "page");
+  await nav.getByRole("link", { name: "صفوفي", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/student\/grades$/);
+  await expect(nav.getByRole("link", { name: "صفوفي", exact: true })).toHaveAttribute("aria-current", "page");
 
   await nav.getByRole("link", { name: "رحلتي", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/student\/journey$/);

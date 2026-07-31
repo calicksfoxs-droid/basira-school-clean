@@ -195,9 +195,10 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(details.groups).toHaveLength(1);
     expect(details.units).toHaveLength(1);
 
-    const created = await store.createLearningSubject(teacher, { title: "الكيمياء" });
+    const grade = (await store.listCurriculumGrades(teacher))[0];
+    const created = await store.createLearningSubject(teacher, { gradeId: grade.id, title: "الكيمياء" });
     const group = await store.createSubjectGroup(teacher, { subjectId: created.id, name: "مجموعة الكيمياء" });
-    const unit = await store.createSubjectUnit(teacher, { subjectId: created.id, title: "الروابط" });
+    const unit = await store.createSubjectUnit(teacher, { subjectId: created.id, termSegment: 1, lessonCount: 0, title: "الروابط" });
     const lesson = await store.createUnitLesson(teacher, { unitId: unit.id, title: "الرابطة الأيونية", structureMode: "direct" });
     expect(group.subjectId).toBe(created.id);
     expect(lesson).toMatchObject({ subjectId: created.id, unitId: unit.id, status: "draft" });
@@ -242,9 +243,10 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
   it("publishes root-subject content only after a real lesson is ready", async () => {
     const core = new DemoLearningCoreStore();
     const content = new DemoStore();
-    const subject = await core.createLearningSubject(teacher, { title: "الرياضيات" });
+    const grade = (await core.listCurriculumGrades(teacher))[0];
+    const subject = await core.createLearningSubject(teacher, { gradeId: grade.id, title: "الرياضيات" });
     const group = await core.createSubjectGroup(teacher, { subjectId: subject.id, name: "مجموعة الجبر" });
-    const unit = await core.createSubjectUnit(teacher, { subjectId: subject.id, title: "الجبر" });
+    const unit = await core.createSubjectUnit(teacher, { subjectId: subject.id, termSegment: 1, lessonCount: 0, title: "الجبر" });
     const lesson = await core.createUnitLesson(teacher, { unitId: unit.id, title: "المعادلات", structureMode: "direct" });
 
     await expect(core.publishSubjectUnit(teacher, unit.id)).rejects.toMatchObject({ code: "FORBIDDEN" });

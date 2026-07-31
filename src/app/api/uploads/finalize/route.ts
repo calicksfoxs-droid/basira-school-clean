@@ -8,8 +8,8 @@ import { isDemoBackend } from "@/lib/env";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { verifyUploadToken } from "@/lib/upload-token";
 
-function bucketFor(kind: "video" | "handout") {
-  return kind === "video" ? "lesson-videos" : "lesson-handouts";
+function bucketFor(kind: "video" | "handout" | "aid") {
+  return kind === "video" ? "lesson-videos" : kind === "aid" ? "lesson-aids" : "lesson-handouts";
 }
 
 export async function POST(request: Request) {

@@ -2,6 +2,8 @@ import "server-only";
 import type { Identity } from "@/domain/models";
 import type {
   LearningJourneyNode,
+  CurriculumGrade,
+  CurriculumGradeDetails,
   LearningSubject,
   LearningSubjectDetails,
   SubjectCoverKey,
@@ -28,9 +30,18 @@ import { inferSubjectCoverKey, isSubjectCoverKey } from "@/lib/subject-covers";
 type Row = Record<string, unknown>;
 const optionalString = (value: unknown) => value == null ? undefined : String(value);
 
-function subjectFrom(row: Row): LearningSubject {
+function gradeFrom(row: Row): CurriculumGrade {
   return {
     id: String(row.id), teacherId: String(row.owner_teacher_id), title: String(row.title),
+    description: optionalString(row.description), displayOrder: Number(row.display_order),
+    status: String(row.status) as CurriculumGrade["status"], createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function subjectFrom(row: Row): LearningSubject {
+  return {
+    id: String(row.id), teacherId: String(row.owner_teacher_id), gradeId: String(row.grade_id), title: String(row.title),
     description: optionalString(row.description), coverKey: isSubjectCoverKey(row.cover_key) ? row.cover_key : undefined,
     bannerTitle: optionalString(row.banner_title),
     bannerBody: optionalString(row.banner_body), bannerCtaLabel: optionalString(row.banner_cta_label),
@@ -50,7 +61,8 @@ function groupFrom(row: Row): SubjectGroup {
 function unitFrom(row: Row): SubjectUnit {
   return {
     id: String(row.id), subjectId: String(row.subject_id), title: String(row.title),
-    description: optionalString(row.description), displayOrder: Number(row.display_order),
+    description: optionalString(row.description), termSegment: Number(row.term_segment) as SubjectUnit["termSegment"],
+    coverPath: optionalString(row.cover_path), displayOrder: Number(row.display_order),
     status: String(row.status) as SubjectUnit["status"], createdAt: String(row.created_at),
   };
 }
@@ -150,6 +162,48 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     assertAllowed((count ?? 0) > 0);
   }
 
+  async listCurriculumGrades(identity: Identity): Promise<CurriculumGrade[]> {
+    assertAllowed(identity.status === "active");
+    const client = this.admin();
+    if (identity.role === "student") {
+      const visibleSubjects = await this.listLearningSubjects(identity);
+      const gradeIds = [...new Set(visibleSubjects.map((subject) => subject.gradeId))];
+      if (!gradeIds.length) return [];
+      const { data, error } = await client.from("curriculum_grades").select("*").in("id", gradeIds).eq("status", "active").order("display_order");
+      if (error) throw error;
+      return ((data ?? []) as Row[]).map(gradeFrom);
+    }
+    let query = client.from("curriculum_grades").select("*").eq("status", "active").order("display_order");
+    if (identity.role === "teacher") query = query.eq("owner_teacher_id", identity.userId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as Row[]).map(gradeFrom);
+  }
+
+  async getCurriculumGrade(identity: Identity, gradeId: string): Promise<CurriculumGradeDetails> {
+    const client = this.admin();
+    const { data, error } = await client.from("curriculum_grades").select("*").eq("id", gradeId).single();
+    if (error) throw error;
+    const grade = gradeFrom(data as Row);
+    assertAllowed(identity.role === "admin" || (identity.role === "teacher" && grade.teacherId === identity.userId) || identity.role === "student");
+    const subjects = (await this.listLearningSubjects(identity)).filter((subject) => subject.gradeId === gradeId);
+    if (identity.role === "student") assertAllowed(subjects.length > 0);
+    return { grade, subjects };
+  }
+
+  async createCurriculumGrade(identity: Identity, input: { title: string; description?: string }): Promise<CurriculumGrade> {
+    assertAllowed(identity.role === "teacher");
+    const client = this.admin();
+    const { count, error: countError } = await client.from("curriculum_grades").select("id", { count: "exact", head: true }).eq("owner_teacher_id", identity.userId);
+    if (countError) throw countError;
+    const { data, error } = await client.from("curriculum_grades").insert({
+      owner_teacher_id: identity.userId, title: input.title.trim(), description: input.description?.trim() || null,
+      display_order: (count ?? 0) + 1, status: "active",
+    }).select("*").single();
+    if (error) throw error;
+    return gradeFrom(data as Row);
+  }
+
   async listLearningSubjects(identity: Identity): Promise<LearningSubject[]> {
     assertAllowed(identity.status === "active");
     const client = this.admin();
@@ -173,8 +227,8 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     const [subjectResult, groupResult, unitResult, lessonResult] = await Promise.all([
       client.from("subjects").select("*").eq("id", subjectId).single(),
       client.from("groups").select("*").eq("subject_id", subjectId).order("created_at"),
-      client.from("subject_units").select("*").eq("subject_id", subjectId).order("display_order"),
-      client.from("lessons").select("*").eq("subject_id", subjectId).order("display_order"),
+      client.from("subject_units").select("*").eq("subject_id", subjectId).neq("status", "archived").order("term_segment").order("display_order"),
+      client.from("lessons").select("*").eq("subject_id", subjectId).neq("status", "archived").order("display_order"),
     ]);
     if (subjectResult.error) throw subjectResult.error;
     await this.assertSubjectReadable(identity, subjectResult.data as Row);
@@ -189,19 +243,32 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     };
   }
 
-  async createLearningSubject(identity: Identity, input: { title: string; description?: string }): Promise<LearningSubject> {
+  async createLearningSubject(identity: Identity, input: { gradeId: string; title: string; description?: string }): Promise<LearningSubject> {
     assertAllowed(identity.role === "teacher");
     const client = this.admin();
+    const { data: grade, error: gradeError } = await client.from("curriculum_grades").select("owner_teacher_id,status").eq("id", input.gradeId).single();
+    if (gradeError) throw gradeError;
+    assertAllowed(String((grade as Row).owner_teacher_id) === identity.userId && String((grade as Row).status) === "active");
     const { count, error: countError } = await client.from("subjects")
       .select("id", { count: "exact", head: true }).eq("owner_teacher_id", identity.userId);
     if (countError) throw countError;
     const { data, error } = await client.from("subjects").insert({
-      group_id: null, owner_teacher_id: identity.userId, title: input.title.trim(),
+      group_id: null, grade_id: input.gradeId, owner_teacher_id: identity.userId, title: input.title.trim(),
       description: input.description?.trim() || null, cover_key: inferSubjectCoverKey(input.title),
       display_order: (count ?? 0) + 1, status: "draft",
     }).select("*").single();
     if (error) throw error;
-    return subjectFrom(data as Row);
+    const subject = subjectFrom(data as Row);
+    const unitRows = ([1, 2, 3, 4] as const).flatMap((termSegment) => [1, 2].map((unitNumber) => ({
+      subject_id: subject.id, term_segment: termSegment, title: unitNumber === 1 ? "الوحدة الأولى" : "الوحدة الثانية",
+      display_order: unitNumber, status: "draft",
+    })));
+    const { error: unitsError } = await client.from("subject_units").insert(unitRows);
+    if (unitsError) {
+      await client.from("subjects").delete().eq("id", subject.id);
+      throw unitsError;
+    }
+    return subject;
   }
 
   async updateSubjectBanner(identity: Identity, input: { subjectId: string; title?: string; body?: string; ctaLabel?: string; ctaPath?: string }): Promise<void> {
@@ -230,19 +297,31 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return groupFrom(data as Row);
   }
 
-  async createSubjectUnit(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<SubjectUnit> {
+  async createSubjectUnit(identity: Identity, input: { subjectId: string; termSegment: 1 | 2 | 3 | 4; lessonCount: number; title: string; description?: string }): Promise<SubjectUnit> {
     const { client } = await this.subjectForWrite(identity, input.subjectId);
     const { data: last, error: orderError } = await client.from("subject_units")
-      .select("display_order").eq("subject_id", input.subjectId)
+      .select("display_order").eq("subject_id", input.subjectId).eq("term_segment", input.termSegment)
       .order("display_order", { ascending: false }).limit(1);
     if (orderError) throw orderError;
     const displayOrder = Number(((last ?? []) as Row[])[0]?.display_order ?? 0) + 1;
     const { data, error } = await client.from("subject_units").insert({
       subject_id: input.subjectId, title: input.title.trim(),
-      description: input.description?.trim() || null, display_order: displayOrder, status: "draft",
+      description: input.description?.trim() || null, term_segment: input.termSegment, display_order: displayOrder, status: "draft",
     }).select("*").single();
     if (error) throw error;
-    return unitFrom(data as Row);
+    const unit = unitFrom(data as Row);
+    if (input.lessonCount > 0) {
+      const lessons = Array.from({ length: input.lessonCount }, (_, index) => ({
+        unit_id: unit.id, subject_id: input.subjectId, title: `الدرس ${index + 1}`,
+        display_order: index + 1, structure_mode: "direct", status: "draft",
+      }));
+      const { error: lessonError } = await client.from("lessons").insert(lessons);
+      if (lessonError) {
+        await client.from("subject_units").delete().eq("id", unit.id);
+        throw lessonError;
+      }
+    }
+    return unit;
   }
 
   async createUnitLesson(identity: Identity, input: { unitId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<UnitLesson> {
@@ -259,6 +338,12 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     }).select("*").single();
     if (error) throw error;
     return lessonFrom(data as Row);
+  }
+
+  async removeUnitLesson(identity: Identity, lessonId: string): Promise<void> {
+    const { client } = await this.lessonForWrite(identity, lessonId);
+    const { error } = await client.from("lessons").update({ status: "archived" }).eq("id", lessonId);
+    if (error) throw error;
   }
 
   async publishLearningSubject(identity: Identity, subjectId: string): Promise<void> {

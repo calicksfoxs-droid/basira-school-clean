@@ -2,6 +2,8 @@ import "server-only";
 import type { Identity } from "@/domain/models";
 import type {
   LearningJourneyNode,
+  CurriculumGrade,
+  CurriculumGradeDetails,
   LearningSubject,
   LearningSubjectDetails,
   SubjectCoverKey,
@@ -15,14 +17,18 @@ import type {
 } from "@/domain/core-models";
 
 export interface LearningCoreStore {
+  listCurriculumGrades(identity: Identity): Promise<CurriculumGrade[]>;
+  getCurriculumGrade(identity: Identity, gradeId: string): Promise<CurriculumGradeDetails>;
+  createCurriculumGrade(identity: Identity, input: { title: string; description?: string }): Promise<CurriculumGrade>;
   listLearningSubjects(identity: Identity): Promise<LearningSubject[]>;
   getLearningSubject(identity: Identity, subjectId: string): Promise<LearningSubjectDetails>;
-  createLearningSubject(identity: Identity, input: { title: string; description?: string }): Promise<LearningSubject>;
+  createLearningSubject(identity: Identity, input: { gradeId: string; title: string; description?: string }): Promise<LearningSubject>;
   updateSubjectBanner(identity: Identity, input: { subjectId: string; title?: string; body?: string; ctaLabel?: string; ctaPath?: string }): Promise<void>;
   updateSubjectCover(identity: Identity, input: { subjectId: string; coverKey: SubjectCoverKey }): Promise<void>;
   createSubjectGroup(identity: Identity, input: { subjectId: string; name: string; description?: string }): Promise<SubjectGroup>;
-  createSubjectUnit(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<SubjectUnit>;
+  createSubjectUnit(identity: Identity, input: { subjectId: string; termSegment: 1 | 2 | 3 | 4; lessonCount: number; title: string; description?: string }): Promise<SubjectUnit>;
   createUnitLesson(identity: Identity, input: { unitId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<UnitLesson>;
+  removeUnitLesson(identity: Identity, lessonId: string): Promise<void>;
   publishLearningSubject(identity: Identity, subjectId: string): Promise<void>;
   publishSubjectUnit(identity: Identity, unitId: string): Promise<void>;
   publishUnitLesson(identity: Identity, lessonId: string): Promise<void>;

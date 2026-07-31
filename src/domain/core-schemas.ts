@@ -5,8 +5,14 @@ const optionalText = (max: number) => z.string().trim().max(max).optional().tran
 const internalPath = z.string().trim().max(300).refine((value) => value.startsWith("/app"), "يجب أن يكون الرابط داخلياً");
 
 export const createLearningSubjectSchema = z.object({
+  gradeId: z.string().uuid(),
   title: z.string().trim().min(2).max(120),
   description: optionalText(500),
+});
+
+export const createCurriculumGradeSchema = z.object({
+  title: z.string().trim().min(2).max(80),
+  description: optionalText(300),
 });
 
 export const updateSubjectBannerSchema = z.object({
@@ -33,8 +39,14 @@ export const createSubjectGroupSchema = z.object({
 
 export const createSubjectUnitSchema = z.object({
   subjectId: z.string().uuid(),
+  termSegment: z.coerce.number().int().min(1).max(4),
+  lessonCount: z.coerce.number().int().min(0).max(40).default(0),
   title: z.string().trim().min(2).max(120),
   description: optionalText(500),
+});
+
+export const removeUnitLessonSchema = z.object({
+  lessonId: z.string().uuid(),
 });
 
 export const createUnitLessonSchema = z.object({

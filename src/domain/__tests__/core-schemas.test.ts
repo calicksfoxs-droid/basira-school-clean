@@ -9,7 +9,8 @@ import {
 
 describe("Basira core schemas", () => {
   it("normalizes optional subject text", () => {
-    expect(createLearningSubjectSchema.parse({ title: "  الفيزياء  ", description: "" })).toEqual({ title: "الفيزياء", description: undefined });
+    const gradeId = "10000000-0000-4000-8000-000000000001";
+    expect(createLearningSubjectSchema.parse({ gradeId, title: "  الفيزياء  ", description: "" })).toEqual({ gradeId, title: "الفيزياء", description: undefined });
   });
 
   it("requires banner CTA label and path together and keeps paths internal", () => {

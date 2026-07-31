@@ -13,10 +13,23 @@ export const SUBJECT_COVER_KEYS = [
   "computer",
 ] as const;
 export type SubjectCoverKey = (typeof SUBJECT_COVER_KEYS)[number];
+export type TermSegment = 1 | 2 | 3 | 4;
+
+export interface CurriculumGrade {
+  id: string;
+  teacherId: string;
+  title: string;
+  description?: string;
+  displayOrder: number;
+  status: "active" | "archived";
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface LearningSubject {
   id: string;
   teacherId: string;
+  gradeId: string;
   title: string;
   description?: string;
   coverKey?: SubjectCoverKey;
@@ -53,6 +66,8 @@ export interface SubjectUnit {
   subjectId: string;
   title: string;
   description?: string;
+  termSegment: TermSegment;
+  coverPath?: string;
   displayOrder: number;
   status: CoreStatus;
   createdAt: string;
@@ -124,4 +139,9 @@ export interface LearningSubjectDetails {
   groups: SubjectGroup[];
   units: SubjectUnit[];
   lessons: UnitLesson[];
+}
+
+export interface CurriculumGradeDetails {
+  grade: CurriculumGrade;
+  subjects: LearningSubject[];
 }

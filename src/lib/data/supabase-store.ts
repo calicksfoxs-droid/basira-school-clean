@@ -435,7 +435,7 @@ export class SupabaseStore implements BasiraStore {
 
   async attachAsset(identity: Identity, input: Omit<Asset, "id" | "createdAt" | "state"> & { state?: Asset["state"] }): Promise<Asset> {
     assertAllowed(identity.role === "teacher");
-    assertAllowed(input.kind === "video" || input.kind === "handout");
+    assertAllowed(input.kind === "video" || input.kind === "handout" || input.kind === "aid");
     const client = await this.client();
     const { data, error } = await client.rpc("finalize_lesson_asset_phase13a", {
       p_kind: input.kind,

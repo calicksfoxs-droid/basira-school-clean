@@ -103,7 +103,7 @@ export interface LessonPart {
 
 export interface Asset {
   id: string;
-  kind: "video" | "handout" | "submission";
+  kind: "video" | "handout" | "aid" | "submission";
   lessonId?: string;
   lessonPartId?: string;
   submissionId?: string;
@@ -206,6 +206,7 @@ export interface DemoDatabase {
   submissions: Submission[];
   answers: Answer[];
   announcements: Announcement[];
+  curriculumGrades: import("./core-models").CurriculumGrade[];
   learningSubjects: import("./core-models").LearningSubject[];
   learningGroups: import("./core-models").SubjectGroup[];
   learningMemberships: import("./core-models").SubjectGroupMembership[];

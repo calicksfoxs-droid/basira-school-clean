@@ -22,7 +22,7 @@ function nav(identity: Identity): NavItem[] {
   ];
   if (identity.role === "teacher") return [
     { href: "/app/teacher", label: "الرئيسية", icon: "home", mobile: true },
-    { href: "/app/teacher/subjects", label: "موادي", icon: "subjects", mobile: true },
+    { href: "/app/teacher/grades", label: "صفوفي", icon: "school", mobile: true },
     { href: "/app/teacher/groups", label: "مجموعاتي", icon: "school" },
     { href: "/app/teacher/students", label: "طلابي", icon: "users", mobile: true },
     { href: "/app/teacher/submissions", label: "التصحيح", icon: "grading" },
@@ -31,7 +31,7 @@ function nav(identity: Identity): NavItem[] {
   ];
   return [
     { href: "/app/student", label: "الرئيسية", icon: "home", mobile: true },
-    { href: "/app/student/subjects", label: "موادي", icon: "subjects", mobile: true },
+    { href: "/app/student/grades", label: "صفوفي", icon: "school", mobile: true },
     { href: "/app/student/journey", label: "رحلتي", icon: "journey", mobile: true },
     { href: "/app/student/results", label: "نتائجي", icon: "grading" },
     { href: "/app/settings", label: "حسابي", icon: "settings", mobile: true },

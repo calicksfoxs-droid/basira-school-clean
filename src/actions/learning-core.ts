@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z, ZodError } from "zod";
 import {
   createLearningSubjectSchema,
+  createCurriculumGradeSchema,
   createSubjectGroupSchema,
   createSubjectUnitSchema,
   createUnitLessonSchema,
+  removeUnitLessonSchema,
   enrollStudentSchema,
   platformSettingsSchema,
   updateSubjectBannerSchema,
@@ -52,13 +54,27 @@ export async function createLearningSubjectAction(formData: FormData): Promise<A
   try {
     const identity = await requireRole("teacher");
     const input = createLearningSubjectSchema.parse({
-      title: text(formData, "title"), description: optional(text(formData, "description")),
+      gradeId: text(formData, "gradeId"), title: text(formData, "title"), description: optional(text(formData, "description")),
     });
     const subject = await getLearningCoreStore().createLearningSubject(identity, input);
     revalidatePath("/app");
     return { ok: true, data: { id: subject.id }, message: "تم إنشاء المادة" };
   } catch (error) { return failure(error); }
 }
+
+export async function createCurriculumGradeAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+  try {
+    const identity = await requireRole("teacher");
+    const input = createCurriculumGradeSchema.parse({ title: text(formData, "title"), description: optional(text(formData, "description")) });
+    const grade = await getLearningCoreStore().createCurriculumGrade(identity, input);
+    revalidatePath("/app");
+    return { ok: true, data: { id: grade.id }, message: "تم إنشاء الصف" };
+  } catch (error) { return failure(error); }
+}
+
+export async function createCurriculumGradeWithStateAction(
+  _previousState: ActionResult<{ id: string }>, formData: FormData,
+): Promise<ActionResult<{ id: string }>> { return createCurriculumGradeAction(formData); }
 
 /** Client-form adapter that preserves validation feedback instead of silently staying on the page. */
 export async function createLearningSubjectWithStateAction(
@@ -112,11 +128,22 @@ export async function createLearningUnitAction(formData: FormData): Promise<Acti
     const identity = await requireRole("admin", "teacher");
     const input = createSubjectUnitSchema.parse({
       subjectId: text(formData, "subjectId"), title: text(formData, "title"),
-      description: optional(text(formData, "description")),
+      description: optional(text(formData, "description")), termSegment: text(formData, "termSegment"),
+      lessonCount: text(formData, "lessonCount"),
     });
-    const unit = await getLearningCoreStore().createSubjectUnit(identity, input);
+    const unit = await getLearningCoreStore().createSubjectUnit(identity, { ...input, termSegment: input.termSegment as 1 | 2 | 3 | 4 });
     revalidatePath("/app");
     return { ok: true, data: { id: unit.id }, message: "تم إنشاء الوحدة" };
+  } catch (error) { return failure(error); }
+}
+
+export async function removeLearningLessonAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const identity = await requireRole("teacher");
+    const input = removeUnitLessonSchema.parse({ lessonId: text(formData, "lessonId") });
+    await getLearningCoreStore().removeUnitLesson(identity, input.lessonId);
+    revalidatePath("/app");
+    return { ok: true, data: undefined, message: "تمت إزالة الدرس" };
   } catch (error) { return failure(error); }
 }
 
@@ -197,6 +224,7 @@ export async function updateLearningSubjectBannerFormAction(formData: FormData):
 export async function createLearningGroupFormAction(formData: FormData): Promise<void> { await createLearningGroupAction(formData); }
 export async function createLearningUnitFormAction(formData: FormData): Promise<void> { await createLearningUnitAction(formData); }
 export async function createLearningLessonFormAction(formData: FormData): Promise<void> { await createLearningLessonAction(formData); }
+export async function removeLearningLessonFormAction(formData: FormData): Promise<void> { await removeLearningLessonAction(formData); }
 export async function enrollExistingStudentFormAction(formData: FormData): Promise<void> { await enrollExistingStudentAction(formData); }
 export async function publishLearningSubjectFormAction(formData: FormData): Promise<void> { await publishLearningSubjectAction(formData); }
 export async function publishLearningUnitFormAction(formData: FormData): Promise<void> { await publishLearningUnitAction(formData); }

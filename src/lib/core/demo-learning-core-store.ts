@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { DemoDatabase, Identity } from "@/domain/models";
 import type {
   LearningJourneyNode,
+  CurriculumGrade,
+  CurriculumGradeDetails,
   LearningSubject,
   LearningSubjectDetails,
   SubjectCoverKey,
@@ -59,6 +61,42 @@ function preferenceFor(database: DemoDatabase, userId: string): UserPreferences 
 }
 
 export class DemoLearningCoreStore implements LearningCoreStore {
+  async listCurriculumGrades(identity: Identity): Promise<CurriculumGrade[]> {
+    const database = await readDemoDatabase();
+    const visibleSubjectGradeIds = identity.role === "student"
+      ? new Set(database.learningSubjects.filter((subject) => canReadSubject(database, identity, subject)).map((subject) => subject.gradeId))
+      : undefined;
+    return database.curriculumGrades
+      .filter((grade) => identity.role === "admin" || (identity.role === "teacher" ? grade.teacherId === identity.userId : visibleSubjectGradeIds?.has(grade.id)))
+      .filter((grade) => grade.status === "active")
+      .sort((left, right) => left.displayOrder - right.displayOrder);
+  }
+
+  async getCurriculumGrade(identity: Identity, gradeId: string): Promise<CurriculumGradeDetails> {
+    const database = await readDemoDatabase();
+    const grade = assertFound(database.curriculumGrades.find((candidate) => candidate.id === gradeId));
+    const subjects = database.learningSubjects
+      .filter((subject) => subject.gradeId === gradeId && canReadSubject(database, identity, subject))
+      .sort((left, right) => left.displayOrder - right.displayOrder);
+    assertAllowed(identity.role === "admin" || (identity.role === "teacher" && grade.teacherId === identity.userId) || (identity.role === "student" && subjects.length > 0));
+    return { grade, subjects };
+  }
+
+  async createCurriculumGrade(identity: Identity, input: { title: string; description?: string }): Promise<CurriculumGrade> {
+    assertAllowed(identity.role === "teacher");
+    return mutateDemoDatabase((database) => {
+      const timestamp = now();
+      const grade: CurriculumGrade = {
+        id: randomUUID(), teacherId: identity.userId, title: input.title.trim(),
+        description: input.description?.trim() || undefined,
+        displayOrder: database.curriculumGrades.filter((item) => item.teacherId === identity.userId).length + 1,
+        status: "active", createdAt: timestamp, updatedAt: timestamp,
+      };
+      database.curriculumGrades.push(grade);
+      return grade;
+    });
+  }
+
   async listLearningSubjects(identity: Identity): Promise<LearningSubject[]> {
     const database = await readDemoDatabase();
     return database.learningSubjects
@@ -88,12 +126,14 @@ export class DemoLearningCoreStore implements LearningCoreStore {
     };
   }
 
-  async createLearningSubject(identity: Identity, input: { title: string; description?: string }): Promise<LearningSubject> {
+  async createLearningSubject(identity: Identity, input: { gradeId: string; title: string; description?: string }): Promise<LearningSubject> {
     assertAllowed(identity.role === "teacher");
     return mutateDemoDatabase((database) => {
       const timestamp = now();
+      const grade = assertFound(database.curriculumGrades.find((item) => item.id === input.gradeId));
+      assertAllowed(grade.teacherId === identity.userId && grade.status === "active");
       const subject: LearningSubject = {
-        id: randomUUID(), teacherId: identity.userId, title: input.title.trim(),
+        id: randomUUID(), teacherId: identity.userId, gradeId: input.gradeId, title: input.title.trim(),
         description: input.description?.trim() || undefined, coverKey: inferSubjectCoverKey(input.title), status: "draft",
         displayOrder: database.learningSubjects.filter((item) => item.teacherId === identity.userId).length + 1,
         createdAt: timestamp, updatedAt: timestamp,
@@ -110,6 +150,14 @@ export class DemoLearningCoreStore implements LearningCoreStore {
         status: subject.status,
         createdAt: subject.createdAt,
       });
+      for (const termSegment of [1, 2, 3, 4] as const) {
+        for (let unitNumber = 1; unitNumber <= 2; unitNumber += 1) {
+          database.learningUnits.push({
+            id: randomUUID(), subjectId: subject.id, title: `الوحدة ${unitNumber === 1 ? "الأولى" : "الثانية"}`,
+            termSegment, displayOrder: unitNumber, status: "draft", createdAt: timestamp,
+          });
+        }
+      }
       return subject;
     });
   }
@@ -146,16 +194,25 @@ export class DemoLearningCoreStore implements LearningCoreStore {
     });
   }
 
-  async createSubjectUnit(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<SubjectUnit> {
+  async createSubjectUnit(identity: Identity, input: { subjectId: string; termSegment: 1 | 2 | 3 | 4; lessonCount: number; title: string; description?: string }): Promise<SubjectUnit> {
     return mutateDemoDatabase((database) => {
       ownSubject(database, identity, input.subjectId);
       const unit: SubjectUnit = {
         id: randomUUID(), subjectId: input.subjectId, title: input.title.trim(),
         description: input.description?.trim() || undefined,
-        displayOrder: database.learningUnits.filter((item) => item.subjectId === input.subjectId).length + 1,
+        termSegment: input.termSegment,
+        displayOrder: database.learningUnits.filter((item) => item.subjectId === input.subjectId && item.termSegment === input.termSegment).length + 1,
         status: "draft", createdAt: now(),
       };
       database.learningUnits.push(unit);
+      for (let index = 1; index <= input.lessonCount; index += 1) {
+        const lesson: UnitLesson = {
+          id: randomUUID(), unitId: unit.id, subjectId: unit.subjectId, title: `الدرس ${index}`,
+          displayOrder: index, structureMode: "direct", status: "draft", createdAt: now(),
+        };
+        database.learningLessons.push(lesson);
+        database.lessons.push({ id: lesson.id, subjectId: lesson.subjectId, unitId: lesson.unitId, title: lesson.title, displayOrder: lesson.displayOrder, structureMode: lesson.structureMode, status: lesson.status, createdAt: lesson.createdAt });
+      }
       return unit;
     });
   }
@@ -183,6 +240,16 @@ export class DemoLearningCoreStore implements LearningCoreStore {
         createdAt: lesson.createdAt,
       });
       return lesson;
+    });
+  }
+
+  async removeUnitLesson(identity: Identity, lessonId: string): Promise<void> {
+    await mutateDemoDatabase((database) => {
+      const lesson = assertFound(database.learningLessons.find((item) => item.id === lessonId));
+      ownSubject(database, identity, lesson.subjectId);
+      lesson.status = "archived";
+      const contentLesson = database.lessons.find((item) => item.id === lessonId);
+      if (contentLesson) contentLesson.status = "archived";
     });
   }
 

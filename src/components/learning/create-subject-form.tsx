@@ -10,7 +10,7 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 type CreateSubjectState = ActionResult<{ id: string }>;
 const initialState: CreateSubjectState = { ok: true, data: undefined as never };
 
-export function CreateSubjectForm() {
+export function CreateSubjectForm({ gradeId }: { gradeId: string }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(createLearningSubjectWithStateAction, initialState);
 
@@ -19,6 +19,7 @@ export function CreateSubjectForm() {
   }, [router, state]);
 
   return <form action={action} noValidate className="mt-5 grid gap-4">
+    <input type="hidden" name="gradeId" value={gradeId}/>
     <Field label="اسم المادة" required hint="اكتب اسمًا من حرفين أو أكثر — مثال: الرياضيات">
       <Input name="title" required placeholder="اكتب اسم المادة هنا" autoComplete="off" />
     </Field>

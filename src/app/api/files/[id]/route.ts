@@ -15,7 +15,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       const buffer = await readFile(path.join(demoUploadDir(), asset.storagePath));
       return new NextResponse(buffer, { headers: { "content-type": asset.mimeType, "content-disposition": `${asset.kind === "video" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(asset.originalFilename)}`, "cache-control": "private, no-store" } });
     }
-    const bucket = asset.kind === "video" ? "lesson-videos" : asset.kind === "handout" ? "lesson-handouts" : "submission-files";
+    const bucket = asset.kind === "video" ? "lesson-videos" : asset.kind === "handout" ? "lesson-handouts" : asset.kind === "aid" ? "lesson-aids" : "submission-files";
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(asset.storagePath, 60);
     if (error) throw error;

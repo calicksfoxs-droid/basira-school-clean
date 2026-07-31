@@ -15,7 +15,7 @@ const handoutExtensions = new Map([
 export async function POST(request: Request) {
   try {
     const identity = await requireRole("teacher");
-    const body = await request.json() as { lessonId?: string; lessonPartId?: string; kind?: "video" | "handout"; fileName?: string; mimeType?: string; sizeBytes?: number; title?: string };
+    const body = await request.json() as { lessonId?: string; lessonPartId?: string; kind?: "video" | "handout" | "aid"; fileName?: string; mimeType?: string; sizeBytes?: number; title?: string };
     if (!body.lessonId || !body.kind || !body.fileName || !body.mimeType || !body.sizeBytes) return NextResponse.json({ error: "بيانات الرفع ناقصة" }, { status: 400 });
     const details = await (await getStore()).getLesson(identity, body.lessonId);
     if (body.lessonPartId && !details.parts.some((part) => part.id === body.lessonPartId)) return NextResponse.json({ error: "جزء الدرس غير صالح" }, { status: 400 });
@@ -23,11 +23,11 @@ export async function POST(request: Request) {
     const maxMb = body.kind === "video" ? env.MAX_VIDEO_UPLOAD_MB : env.MAX_HANDOUT_UPLOAD_MB;
     if (body.sizeBytes > maxMb * 1024 * 1024) return NextResponse.json({ error: `حجم الملف يتجاوز ${maxMb} MB` }, { status: 400 });
     if (body.kind === "video" && !allowedVideo.has(body.mimeType)) return NextResponse.json({ error: "الفيديو يجب أن يكون MP4 أو WebM" }, { status: 400 });
-    if (body.kind === "handout" && !handoutExtensions.has(body.mimeType)) return NextResponse.json({ error: "الملف يجب أن يكون PDF أو صورة JPG/PNG/WebP" }, { status: 400 });
+    if ((body.kind === "handout" || body.kind === "aid") && !handoutExtensions.has(body.mimeType)) return NextResponse.json({ error: "الملف يجب أن يكون PDF أو صورة JPG/PNG/WebP" }, { status: 400 });
     const extension = body.kind === "video"
       ? (body.mimeType === "video/webm" ? "webm" : "mp4")
       : handoutExtensions.get(body.mimeType)!;
-    const bucket = body.kind === "video" ? "lesson-videos" : "lesson-handouts";
+    const bucket = body.kind === "video" ? "lesson-videos" : body.kind === "aid" ? "lesson-aids" : "lesson-handouts";
     const container = body.lessonPartId ?? "direct";
     // Legacy content is scoped by group; Learning Core content is scoped by its
     // teacher-owned subject. The storage RLS migration validates both shapes.
