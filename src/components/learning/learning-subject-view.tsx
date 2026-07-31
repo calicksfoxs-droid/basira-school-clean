@@ -1,24 +1,20 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BookOpen, ChevronLeft, Compass, ImageIcon, Layers3, Plus, Users } from "lucide-react";
+import { BookOpen, ChevronLeft, Compass, Layers3, Plus, Users } from "lucide-react";
 import type { Identity } from "@/domain/models";
 import type { LearningSubjectDetails } from "@/domain/core-models";
 import {
-  createLearningGroupAction,
   createLearningLessonAction,
-  createLearningUnitAction,
-  enrollExistingStudentAction,
   publishLearningLessonAction,
   publishLearningSubjectAction,
   publishLearningUnitAction,
-  updateLearningSubjectBannerAction,
 } from "@/actions/learning-core";
 import { ActionForm } from "@/components/ui/action-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
-import { SubjectCoverPicker } from "@/components/learning/subject-cover-picker";
+import { Input, Select } from "@/components/ui/input";
+import { SubjectAuthoringToolbar } from "@/components/learning/subject-authoring-toolbar";
 import { subjectCoverPath } from "@/lib/subject-covers";
 
 export function LearningSubjectView({ identity, details }: { identity: Identity; details: LearningSubjectDetails }) {
@@ -28,7 +24,6 @@ export function LearningSubjectView({ identity, details }: { identity: Identity;
     <section className="relative min-h-[300px] overflow-hidden rounded-[28px] bg-[#2b1459] text-white">
       <Image data-testid="subject-hero-cover" src={subjectCoverPath(details.subject)} alt="" fill priority sizes="(max-width: 1024px) 100vw, 1100px" className="object-cover"/>
       <div className="absolute inset-0 bg-[#170b35]/55"/>
-      {editable && <a href="#subject-cover-picker" className="focus-ring absolute left-5 top-5 z-10 inline-flex min-h-11 items-center gap-2 rounded-2xl border border-white/25 bg-[#170b35]/70 px-4 text-sm font-black text-white shadow-lg backdrop-blur transition hover:bg-[#170b35]"><ImageIcon className="size-4"/> تغيير الغلاف</a>}
       <div className="relative flex min-h-[300px] max-w-2xl flex-col items-start justify-end p-7 sm:p-10">
         <span className="mb-3 rounded-full bg-[#20c7b5] px-3 py-1 text-xs font-black text-[#170b35]">{details.subject.status === "published" ? "مادة منشورة" : "مسودة"}</span>
         <h1 className="font-heading text-3xl font-bold sm:text-4xl">{details.subject.bannerTitle || details.subject.title}</h1>
@@ -43,6 +38,8 @@ export function LearningSubjectView({ identity, details }: { identity: Identity;
       <div className="metric-card"><Layers3/><span><strong>{details.units.length}</strong><small>الوحدات</small></span></div>
       <div className="metric-card"><BookOpen/><span><strong>{details.lessons.length}</strong><small>الدروس</small></span></div>
     </div>
+
+    {editable && <SubjectAuthoringToolbar subject={details.subject} groups={details.groups}/>}
 
     {editable && details.groups.length > 0 && <section className="grid gap-3">
       <div><h2 className="font-heading text-2xl font-bold">مجموعات المادة</h2><p className="mt-1 text-sm text-[var(--muted)]">كل طالب يرى محتوى مجموعته داخل هذه المادة فقط.</p></div>
@@ -71,12 +68,5 @@ export function LearningSubjectView({ identity, details }: { identity: Identity;
       }) : <EmptyState title="لا توجد وحدات بعد" description={editable ? "أضف الوحدة الأولى من أدوات الإدارة." : "لم ينشر المعلم وحدات بعد."}/>} 
     </section>
 
-    {editable && <section className="grid gap-5 xl:grid-cols-2">
-      <SubjectCoverPicker subject={details.subject}/>
-      <Card><CardTitle>إعداد إعلان المادة</CardTitle><CardDescription>يظهر أعلى صفحة المادة للطلاب.</CardDescription><ActionForm action={updateLearningSubjectBannerAction} className="mt-5 grid gap-4"><input type="hidden" name="subjectId" value={details.subject.id}/><Field label="عنوان الإعلان"><Input name="title" defaultValue={details.subject.bannerTitle}/></Field><Field label="النص"><Textarea name="body" defaultValue={details.subject.bannerBody}/></Field><Button>حفظ الإعلان</Button></ActionForm></Card>
-      <Card><CardTitle>إضافة وحدة</CardTitle><CardDescription>كل وحدة تحتوي على مجموعة دروس مرتبة.</CardDescription><ActionForm action={createLearningUnitAction} className="mt-5 grid gap-4"><input type="hidden" name="subjectId" value={details.subject.id}/><Field label="اسم الوحدة"><Input name="title" required/></Field><Field label="وصف مختصر"><Textarea name="description"/></Field><Button>إضافة الوحدة</Button></ActionForm></Card>
-      <Card><CardTitle>إضافة مجموعة</CardTitle><CardDescription>المجموعات تحدد الطلاب الذين يرون المادة.</CardDescription><ActionForm action={createLearningGroupAction} className="mt-5 grid gap-4"><input type="hidden" name="subjectId" value={details.subject.id}/><Field label="اسم المجموعة"><Input name="name" required/></Field><Field label="الوصف"><Textarea name="description"/></Field><Button>إضافة المجموعة</Button></ActionForm></Card>
-      <Card><CardTitle>تسجيل طالب موجود</CardTitle><CardDescription>استخدم معرّف الانضمام، وليس رمز دخول الطالب.</CardDescription>{details.groups.length ? <ActionForm action={enrollExistingStudentAction} className="mt-5 grid gap-4"><Field label="المجموعة"><Select name="groupId" required>{details.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</Select></Field><Field label="معرّف الانضمام"><Input name="enrollmentReference" required dir="ltr" placeholder="BSR-S-XXXXXXXXXXXX"/></Field><Button>تسجيل الطالب</Button></ActionForm> : <EmptyState title="أنشئ مجموعة أولًا"/>}</Card>
-    </section>}
   </div>;
 }

@@ -31,14 +31,17 @@ test("teacher gets a relevant cover automatically and can replace it persistentl
 
   const hero = page.getByTestId("subject-hero-cover");
   await expect(hero).toHaveAttribute("src", /subject-chemistry-v1\.webp/);
+  await page.getByRole("button", { name: "تخصيص المظهر" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByText("الأحياء", { exact: true }).click();
   await expect(page.getByRole("radio", { name: /الأحياء/ })).toBeChecked();
-  await page.getByRole("button", { name: "حفظ الغلاف الجديد" }).click();
+  await page.getByRole("button", { name: "حفظ الغلاف", exact: true }).click();
   await expect(page.getByText("تم حفظ غلاف المادة وظهر للطلاب")).toBeVisible();
   await expect(hero).toHaveAttribute("src", /subject-biology-v1\.webp/);
 
   await page.reload();
   await expect(page.getByTestId("subject-hero-cover")).toHaveAttribute("src", /subject-biology-v1\.webp/);
+  await page.getByRole("button", { name: "تخصيص المظهر" }).click();
   await expect(page.getByRole("radio", { name: /الأحياء/ })).toBeChecked();
 });
 
@@ -53,15 +56,23 @@ test("teacher can build a unit, group, lesson, and attach a PDF", async ({ page 
   const subjectUrl = page.url();
 
   const unitTitle = "E2E Unit";
-  const unitForm = page.locator("form").filter({ has: page.locator('input[name="title"][required]') });
+  await page.getByRole("button", { name: "إضافة وحدة", exact: true }).click();
+  let panel = page.getByRole("dialog");
+  const unitForm = panel.locator("form").filter({ has: page.locator('input[name="title"][required]') });
   await unitForm.locator('input[name="title"]').fill(unitTitle);
   await unitForm.getByRole("button").click();
+  await expect(panel.getByText("تم إنشاء الوحدة")).toBeVisible();
+  await panel.getByRole("button", { name: "إغلاق اللوحة" }).click();
   await expect(page.getByText(unitTitle, { exact: true })).toBeVisible();
 
   const groupTitle = "E2E Group";
-  const groupForm = page.locator("form").filter({ has: page.locator('input[name="name"]') });
+  await page.getByRole("button", { name: "مجموعة جديدة", exact: true }).click();
+  panel = page.getByRole("dialog");
+  const groupForm = panel.locator("form").filter({ has: page.locator('input[name="name"]') });
   await groupForm.locator('input[name="name"]').fill(groupTitle);
   await groupForm.getByRole("button").click();
+  await expect(panel.getByText("تم إنشاء المجموعة")).toBeVisible();
+  await panel.getByRole("button", { name: "إغلاق اللوحة" }).click();
   await expect(page.getByRole("heading", { name: groupTitle })).toBeVisible();
 
   const lessonTitle = "E2E Lesson";
