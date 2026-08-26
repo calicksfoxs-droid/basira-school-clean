@@ -43,7 +43,40 @@ MAX_HANDOUT_UPLOAD_MB=25
 MAX_SUBMISSION_UPLOAD_MB=20
 ```
 
-## Render
+## Cloudflare Workers (primary)
+
+The production Next.js application runs on Cloudflare Workers through Vinext.
+The database, authentication, and private uploads remain on Supabase.
+
+```powershell
+npm run build:vinext
+npm run start:vinext
+npm run deploy:vinext
+```
+
+Non-secret production variables are declared in `wrangler.jsonc`. Store these
+values with `wrangler secret put`; never commit them:
+
+```text
+BASIRA_APP_SECRET
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+```
+
+Production URL: `https://basira-school-clean.calicksfoxs.workers.dev`
+
+After every deployment, require both checks to return HTTP 200:
+
+```powershell
+Invoke-RestMethod https://basira-school-clean.calicksfoxs.workers.dev/api/health
+Invoke-RestMethod 'https://basira-school-clean.calicksfoxs.workers.dev/api/health?deep=1'
+```
+
+The deep probe must report `backend: "supabase"` and `database: "ready"`.
+Free Supabase projects can pause after inactivity; resume the project before
+deploying if its project hostname no longer resolves.
+
+## Render (legacy fallback)
 
 `render.yaml` configures a Node web service with `/api/health`. Keep secrets in Render Environment. For staged acceptance, deploy an exact commit and verify the deployed SHA in the Dashboard before merging/tagging.
 

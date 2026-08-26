@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "basira-school-clean",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "main": "vinext/server/fetch-handler",
+  "vars": {
+    "BASIRA_BACKEND": "supabase",
+    "NEXT_PUBLIC_APP_URL": "https://basira-school-clean.calicksfoxs.workers.dev",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://fhedbrmdrgzvbtjvlgfu.supabase.co",
+    "MAX_VIDEO_UPLOAD_MB": "250",
+    "MAX_HANDOUT_UPLOAD_MB": "25",
+    "MAX_SUBMISSION_UPLOAD_MB": "20"
+  },
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "cache": {
+    "enabled": true
+  }
+}

@@ -46,3 +46,8 @@ next-env.d.ts
 /playwright-report/
 /test-results/
 /blob-report/
+/dist/
+.vinext/
+.wrangler/
+/.wrangler-dry-run/
+/supabase/.temp/

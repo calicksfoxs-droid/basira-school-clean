@@ -58,7 +58,9 @@ npm run build
 npm run verify:release
 ```
 
-آخر نتيجة مثبتة: ESLint ناجح، TypeScript ناجح، Vitest ‏59/59، Playwright ‏25 ناجحًا وواحد تخطٍ مقصود، والتحقق الثابت والبناء الإنتاجي ناجحان.
+آخر نتيجة مثبتة: ESLint ناجح، TypeScript ناجح، Vitest ‏76/76، Playwright ‏35 ناجحًا وواحد تخطٍ مقصود، والتحقق الثابت وبناء Next.js وبناء Cloudflare Workers ناجحة.
+
+نسخة الإنتاج الأساسية: `https://basira-school-clean.calicksfoxs.workers.dev`
 
 ## إعداد الإنتاج على Supabase
 

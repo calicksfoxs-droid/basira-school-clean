@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "node --import ./scripts/legacy-brace-expansion.mjs ./node_modules/eslint/bin/eslint.js .",
-    "typecheck": "node scripts/prepare-typecheck.mjs && tsc --noEmit",
+    "typecheck": "node scripts/prepare-typecheck.mjs && next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
@@ -16,27 +16,34 @@
     "seed:supabase": "node --env-file=.env.local scripts/seed-supabase.mjs",
     "seed:supabase:reset-admin": "node --env-file=.env.local scripts/seed-supabase.mjs --reset-admin",
     "verify:static": "node scripts/verify-release.mjs",
-    "verify:release": "npm run lint && npm run typecheck && npm run test && npm run verify:static && npm run build"
+    "verify:release": "npm run lint && npm run typecheck && npm run test && npm run verify:static && npm run build",
+    "dev:vinext": "vinext dev --port 3001",
+    "build:vinext": "vinext build",
+    "start:vinext": "wrangler dev --config dist/server/wrangler.json",
+    "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.7",
+    "@vinext/cloudflare": "^1.0.0-beta.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lowdb": "^7.0.1",
     "lucide-react": "^1.25.0",
     "nanoid": "^6.0.0",
-    "next": "16.2.12",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "next": "16.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "react-hook-form": "^7.82.0",
+    "react-server-dom-webpack": "^19.2.8",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.6.0",
     "tus-js-client": "^4.3.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.54.0",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
@@ -45,16 +52,23 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.0",
+    "@vitejs/plugin-rsc": "^0.5.34",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.3.3",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vinext": "^1.0.0-beta.8",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.126.0"
   },
   "overrides": {
-    "postcss": "8.5.19",
+    "postcss": "8.5.26",
+    "nanoid@^3.0.0": "3.3.18",
     "brace-expansion": "5.0.8",
     "sharp": "0.35.3"
-  }
+  },
+  "type": "module"
 }
