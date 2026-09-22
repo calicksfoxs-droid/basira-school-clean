@@ -215,6 +215,15 @@ export class SupabaseStore implements BasiraStore {
     const syntheticEmail = `basira.${generated.publicRef.toLowerCase()}@access.invalid`;
     const admin = this.admin();
     const timestamp = iso();
+
+    const { data: profileBefore, error: profileReadError } = await admin
+      .from("profiles")
+      .select("session_invalid_before")
+      .eq("id", userId)
+      .single();
+    if (profileReadError) throw profileReadError;
+    const previousInvalidBefore = String((profileBefore as Record<string, unknown>).session_invalid_before);
+
     const { data: previousCredentials, error: previousError } = await admin
       .from("access_credentials")
       .select("id,state,disabled_at")
@@ -222,13 +231,49 @@ export class SupabaseStore implements BasiraStore {
       .neq("state", "disabled");
     if (previousError) throw previousError;
 
-    const { error: profileError } = await admin.from("profiles").update({ session_invalid_before: timestamp }).eq("id", userId);
+    const restorePreviousState = async (newCredentialId?: string) => {
+      const compensationErrors: string[] = [];
+
+      if (newCredentialId) {
+        const { error } = await admin.from("access_credentials").delete().eq("id", newCredentialId);
+        if (error) compensationErrors.push(`delete-new-credential: ${error.message}`);
+      }
+
+      for (const previous of previousCredentials ?? []) {
+        const { error } = await admin
+          .from("access_credentials")
+          .update({ state: previous.state, disabled_at: previous.disabled_at })
+          .eq("id", previous.id);
+        if (error) compensationErrors.push(`restore-credential-${previous.id}: ${error.message}`);
+      }
+
+      const { error: watermarkError } = await admin
+        .from("profiles")
+        .update({ session_invalid_before: previousInvalidBefore })
+        .eq("id", userId);
+      if (watermarkError) compensationErrors.push(`restore-watermark: ${watermarkError.message}`);
+
+      if (compensationErrors.length) {
+        console.error("Supabase access reset compensation incomplete", compensationErrors.join("; "));
+      }
+    };
+
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update({ session_invalid_before: timestamp })
+      .eq("id", userId);
     if (profileError) throw profileError;
 
-    const { error: disableError } = await admin.from("access_credentials")
+    const { error: disableError } = await admin
+      .from("access_credentials")
       .update({ state: "disabled", disabled_at: timestamp })
-      .eq("auth_user_id", userId).neq("state", "disabled");
-    if (disableError) throw disableError;
+      .eq("auth_user_id", userId)
+      .neq("state", "disabled");
+    if (disableError) {
+      await restorePreviousState();
+      throw disableError;
+    }
+
     const { data: newCredential, error: credentialError } = await admin.from("access_credentials").insert({
       auth_user_id: userId,
       public_account_ref: generated.publicRef,
@@ -240,20 +285,20 @@ export class SupabaseStore implements BasiraStore {
       last_reset_at: timestamp,
     }).select("id").single();
     if (credentialError) {
-      for (const previous of previousCredentials ?? []) {
-        await admin.from("access_credentials").update({ state: previous.state, disabled_at: previous.disabled_at }).eq("id", previous.id);
-      }
+      await restorePreviousState();
       throw credentialError;
     }
 
-    const { error: authError } = await admin.auth.admin.updateUserById(userId, { email: syntheticEmail, password: generated.secret, email_confirm: true });
+    const { error: authError } = await admin.auth.admin.updateUserById(userId, {
+      email: syntheticEmail,
+      password: generated.secret,
+      email_confirm: true,
+    });
     if (authError) {
-      await admin.from("access_credentials").delete().eq("id", newCredential.id);
-      for (const previous of previousCredentials ?? []) {
-        await admin.from("access_credentials").update({ state: previous.state, disabled_at: previous.disabled_at }).eq("id", previous.id);
-      }
+      await restorePreviousState(String(newCredential.id));
       throw authError;
     }
+
     return { user: { ...user, syntheticEmail, sessionInvalidBefore: timestamp }, code: generated.code };
   }
 
@@ -262,11 +307,23 @@ export class SupabaseStore implements BasiraStore {
     const user = assertFound(users.find((u) => u.id === userId));
     if (identity.role === "teacher") assertAllowed(user.role === "student");
     else assertAllowed(identity.role === "admin");
+
     const admin = this.admin();
     const timestamp = iso();
-    const { error } = await admin.from("profiles").update({ status: "disabled", session_invalid_before: timestamp }).eq("id", userId);
-    if (error) throw error;
-    await admin.from("access_credentials").update({ state: "disabled", disabled_at: timestamp }).eq("auth_user_id", userId);
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update({ status: "disabled", session_invalid_before: timestamp })
+      .eq("id", userId);
+    if (profileError) throw profileError;
+
+    const { error: credentialError } = await admin
+      .from("access_credentials")
+      .update({ state: "disabled", disabled_at: timestamp })
+      .eq("auth_user_id", userId);
+    if (credentialError) {
+      console.error("Supabase disable credential bookkeeping failed", credentialError.message);
+      throw credentialError;
+    }
   }
 
   async listGroups(identity: Identity): Promise<Group[]> {
