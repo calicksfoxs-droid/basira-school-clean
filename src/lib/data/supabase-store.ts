@@ -214,7 +214,19 @@ export class SupabaseStore implements BasiraStore {
     const generated = generateAccessCode();
     const syntheticEmail = `basira.${generated.publicRef.toLowerCase()}@access.invalid`;
     const admin = this.admin();
-    const timestamp = iso();
+    const resetStartedAt = iso();
+
+    const { data: profileBefore, error: profileReadError } = await admin
+      .from("profiles")
+      .select("status,session_invalid_before")
+      .eq("id", userId)
+      .single();
+    if (profileReadError) throw profileReadError;
+
+    const previousProfile = profileBefore as Record<string, unknown>;
+    const previousStatus = String(previousProfile.status) as "active" | "disabled";
+    const previousInvalidBefore = String(previousProfile.session_invalid_before);
+
     const { data: previousCredentials, error: previousError } = await admin
       .from("access_credentials")
       .select("id,state,disabled_at")
@@ -222,39 +234,131 @@ export class SupabaseStore implements BasiraStore {
       .neq("state", "disabled");
     if (previousError) throw previousError;
 
-    const { error: profileError } = await admin.from("profiles").update({ session_invalid_before: timestamp }).eq("id", userId);
-    if (profileError) throw profileError;
+    const restorePreAuthState = async () => {
+      const compensationErrors: string[] = [];
 
-    const { error: disableError } = await admin.from("access_credentials")
-      .update({ state: "disabled", disabled_at: timestamp })
-      .eq("auth_user_id", userId).neq("state", "disabled");
-    if (disableError) throw disableError;
-    const { data: newCredential, error: credentialError } = await admin.from("access_credentials").insert({
-      auth_user_id: userId,
-      public_account_ref: generated.publicRef,
-      synthetic_email: syntheticEmail,
-      role: user.role,
-      state: "unused",
-      code_hint: `BSR-${generated.publicRef}-••••••••`,
-      issued_by: identity.userId,
-      last_reset_at: timestamp,
-    }).select("id").single();
-    if (credentialError) {
       for (const previous of previousCredentials ?? []) {
-        await admin.from("access_credentials").update({ state: previous.state, disabled_at: previous.disabled_at }).eq("id", previous.id);
+        const { data, error } = await admin
+          .from("access_credentials")
+          .update({ state: previous.state, disabled_at: previous.disabled_at })
+          .eq("id", previous.id)
+          .eq("state", "disabled")
+          .eq("disabled_at", resetStartedAt)
+          .select("id")
+          .maybeSingle();
+        if (error) compensationErrors.push(`restore-credential-${previous.id}: ${error.message}`);
+        else if (!data) compensationErrors.push(`restore-credential-${previous.id}: state superseded`);
       }
+
+      const { data: restoredProfile, error: profileRestoreError } = await admin
+        .from("profiles")
+        .update({
+          status: previousStatus,
+          session_invalid_before: previousInvalidBefore,
+        })
+        .eq("id", userId)
+        .eq("status", "disabled")
+        .eq("session_invalid_before", resetStartedAt)
+        .select("id")
+        .maybeSingle();
+      if (profileRestoreError) compensationErrors.push(`restore-profile: ${profileRestoreError.message}`);
+      else if (!restoredProfile) compensationErrors.push("restore-profile: reset lock superseded");
+
+      if (compensationErrors.length) {
+        console.error("Supabase access reset compensation incomplete", compensationErrors.join("; "));
+      }
+    };
+
+    // Lock authorization before changing credential/Auth state. This closes the
+    // reset window even if an old access code races with the reset.
+    const { data: lockedProfile, error: profileLockError } = await admin
+      .from("profiles")
+      .update({
+        status: "disabled",
+        session_invalid_before: resetStartedAt,
+      })
+      .eq("id", userId)
+      .eq("status", previousStatus)
+      .eq("session_invalid_before", previousInvalidBefore)
+      .select("id")
+      .maybeSingle();
+    if (profileLockError) throw profileLockError;
+    if (!lockedProfile) throw new Error("Access reset state changed before lock acquisition");
+
+    const { error: disableError } = await admin
+      .from("access_credentials")
+      .update({ state: "disabled", disabled_at: resetStartedAt })
+      .eq("auth_user_id", userId)
+      .neq("state", "disabled");
+    if (disableError) {
+      await restorePreAuthState();
+      throw disableError;
+    }
+
+    const { data: newCredential, error: credentialError } = await admin
+      .from("access_credentials")
+      .insert({
+        auth_user_id: userId,
+        public_account_ref: generated.publicRef,
+        synthetic_email: syntheticEmail,
+        role: user.role,
+        state: "unused",
+        code_hint: `BSR-${generated.publicRef}-••••••••`,
+        issued_by: identity.userId,
+        last_reset_at: resetStartedAt,
+      })
+      .select("id")
+      .single();
+
+    if (credentialError) {
+      await restorePreAuthState();
       throw credentialError;
     }
 
-    const { error: authError } = await admin.auth.admin.updateUserById(userId, { email: syntheticEmail, password: generated.secret, email_confirm: true });
-    if (authError) {
-      await admin.from("access_credentials").delete().eq("id", newCredential.id);
-      for (const previous of previousCredentials ?? []) {
-        await admin.from("access_credentials").update({ state: previous.state, disabled_at: previous.disabled_at }).eq("id", previous.id);
-      }
-      throw authError;
+    // From this point onward the external Auth mutation may have an ambiguous
+    // outcome. Never restore old credentials/session validity after attempting it.
+    let authError: unknown = null;
+    try {
+      const result = await admin.auth.admin.updateUserById(userId, {
+        email: syntheticEmail,
+        password: generated.secret,
+        email_confirm: true,
+      });
+      authError = result.error;
+    } catch (error) {
+      authError = error;
     }
-    return { user: { ...user, syntheticEmail, sessionInvalidBefore: timestamp }, code: generated.code };
+    if (authError) throw authError;
+
+    // session_is_current() intentionally tolerates one second of clock skew.
+    // Move the final watermark 1001 ms ahead so every token minted during the
+    // reset window remains older than the effective post-tolerance boundary.
+    const finalInvalidBefore = new Date(Date.now() + 1001).toISOString();
+    const { data: finalizedProfile, error: finalProfileError } = await admin
+      .from("profiles")
+      .update({
+        status: previousStatus,
+        session_invalid_before: finalInvalidBefore,
+      })
+      .eq("id", userId)
+      .eq("status", "disabled")
+      .eq("session_invalid_before", resetStartedAt)
+      .select("id")
+      .maybeSingle();
+
+    if (finalProfileError) {
+      // Keep the profile disabled and old credentials disabled. Recovery must be
+      // an explicit later reset; security state must never roll backward here.
+      throw finalProfileError;
+    }
+    if (!finalizedProfile) {
+      throw new Error("Access reset state changed before finalization");
+    }
+
+    return {
+      user: { ...user, syntheticEmail, sessionInvalidBefore: finalInvalidBefore },
+      code: generated.code,
+    };
   }
 
   async disableUser(identity: Identity, userId: string) {
@@ -262,11 +366,23 @@ export class SupabaseStore implements BasiraStore {
     const user = assertFound(users.find((u) => u.id === userId));
     if (identity.role === "teacher") assertAllowed(user.role === "student");
     else assertAllowed(identity.role === "admin");
+
     const admin = this.admin();
     const timestamp = iso();
-    const { error } = await admin.from("profiles").update({ status: "disabled", session_invalid_before: timestamp }).eq("id", userId);
-    if (error) throw error;
-    await admin.from("access_credentials").update({ state: "disabled", disabled_at: timestamp }).eq("auth_user_id", userId);
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update({ status: "disabled", session_invalid_before: timestamp })
+      .eq("id", userId);
+    if (profileError) throw profileError;
+
+    const { error: credentialError } = await admin
+      .from("access_credentials")
+      .update({ state: "disabled", disabled_at: timestamp })
+      .eq("auth_user_id", userId);
+    if (credentialError) {
+      console.error("Supabase disable credential bookkeeping failed", credentialError.message);
+      throw credentialError;
+    }
   }
 
   async listGroups(identity: Identity): Promise<Group[]> {

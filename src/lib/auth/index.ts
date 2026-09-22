@@ -7,6 +7,90 @@ import { mutateDemoDatabase, parseAccessCode, verifySecret } from "@/lib/demo/de
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
+type SupabaseAccessCredential = {
+  id: string;
+  auth_user_id: string;
+  synthetic_email: string;
+  role: string;
+  state: string;
+  first_used_at: string | null;
+};
+
+type SupabaseProfile = {
+  display_name: string;
+  role: string;
+  status: "active" | "disabled";
+};
+
+const invalidAccessCode = () => ({ ok: false, error: "رمز الدخول غير صالح" } as const);
+
+async function resolveSupabaseCredential(publicRef: string) {
+  const admin = createAdminSupabaseClient();
+  const { data, error } = await admin
+    .from("access_credentials")
+    .select("id,auth_user_id,synthetic_email,role,state,first_used_at")
+    .eq("public_account_ref", publicRef)
+    .maybeSingle();
+
+  if (error) console.error("Supabase access credential lookup failed", error.message);
+  if (error || !data || data.state === "disabled") return null;
+
+  return { admin, credential: data as SupabaseAccessCredential };
+}
+
+async function resolveActiveProfile(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+): Promise<{ profile: SupabaseProfile; role: Role } | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("display_name, role, status")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error || !data || data.status !== "active") return null;
+
+  try {
+    return { profile: data as SupabaseProfile, role: normalizeRole(String(data.role)) };
+  } catch {
+    return null;
+  }
+}
+
+async function activateSupabaseCredential(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  credential: SupabaseAccessCredential,
+  userId: string,
+): Promise<boolean> {
+  const activate = async (writeFirstUse: boolean) => {
+    let query = admin
+      .from("access_credentials")
+      .update(writeFirstUse
+        ? { state: "active", first_used_at: new Date().toISOString() }
+        : { state: "active" })
+      .eq("id", credential.id)
+      .eq("auth_user_id", userId)
+      .neq("state", "disabled");
+
+    if (writeFirstUse) query = query.is("first_used_at", null);
+    return query.select("id").maybeSingle();
+  };
+
+  let activation = await activate(!credential.first_used_at);
+  if (!activation.error && !activation.data && !credential.first_used_at) {
+    activation = await activate(false);
+  }
+
+  if (activation.error || !activation.data) {
+    console.error(
+      "Supabase access credential update failed",
+      activation.error?.message ?? "Credential is no longer active",
+    );
+    return false;
+  }
+  return true;
+}
+
 export async function loginWithAccessCode(code: string): Promise<{ ok: true; identity: Identity } | { ok: false; error: string }> {
   const parsed = parseAccessCode(code);
   if (!parsed) return { ok: false, error: "رمز الدخول غير صالح" };
@@ -25,34 +109,59 @@ export async function loginWithAccessCode(code: string): Promise<{ ok: true; ide
     return { ok: true, identity };
   }
 
+  const resolvedCredential = await resolveSupabaseCredential(parsed.publicRef);
+  if (!resolvedCredential) return invalidAccessCode();
+
+  const { admin, credential } = resolvedCredential;
   const supabase = await createServerSupabaseClient();
-  const email = `basira.${parsed.publicRef.toLowerCase()}@access.invalid`;
-  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password: parsed.secret });
+  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+    email: credential.synthetic_email,
+    password: parsed.secret,
+  });
   if (signInError || !signInData.user) {
     console.error("Supabase access-code sign-in failed", signInError?.message ?? "No user returned");
-    return { ok: false, error: "رمز الدخول غير صالح" };
+    return invalidAccessCode();
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("display_name, role, status")
-    .eq("id", signInData.user.id)
-    .maybeSingle();
-  if (profileError || !profile || profile.status === "disabled") {
+  if (signInData.user.id !== credential.auth_user_id) {
     await supabase.auth.signOut();
-    return { ok: false, error: "رمز الدخول غير صالح" };
+    console.error("Supabase access-code credential user mismatch");
+    return invalidAccessCode();
   }
 
-  const admin = createAdminSupabaseClient();
-  const { error: credentialUpdateError } = await admin
-    .from("access_credentials")
-    .update({ state: "active", first_used_at: new Date().toISOString() })
-    .eq("auth_user_id", signInData.user.id);
-  if (credentialUpdateError) console.error("Supabase access credential update failed", credentialUpdateError.message);
+  const resolvedProfile = await resolveActiveProfile(supabase, signInData.user.id);
+  if (!resolvedProfile) {
+    await supabase.auth.signOut();
+    return invalidAccessCode();
+  }
+
+  let credentialRole: Role;
+  try {
+    credentialRole = normalizeRole(credential.role);
+  } catch {
+    await supabase.auth.signOut();
+    return invalidAccessCode();
+  }
+
+  if (resolvedProfile.role !== credentialRole) {
+    await supabase.auth.signOut();
+    console.error("Supabase access-code credential role mismatch");
+    return invalidAccessCode();
+  }
+
+  if (!await activateSupabaseCredential(admin, credential, signInData.user.id)) {
+    await supabase.auth.signOut();
+    return invalidAccessCode();
+  }
 
   return {
     ok: true,
-    identity: { userId: signInData.user.id, displayName: profile.display_name, role: normalizeRole(profile.role), status: profile.status },
+    identity: {
+      userId: signInData.user.id,
+      displayName: resolvedProfile.profile.display_name,
+      role: resolvedProfile.role,
+      status: "active",
+    },
   };
 }
 
