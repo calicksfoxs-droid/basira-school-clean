@@ -101,7 +101,8 @@ describe("Supabase auth lifecycle compensation", () => {
 
     const store = new SupabaseStore();
     vi.spyOn(store, "listUsers").mockResolvedValue([targetUser]);
-    vi.spyOn(store as never, "admin" as never).mockReturnValue(admin as never);
+    const storeWithAdmin = store as unknown as { admin: () => typeof admin };
+    vi.spyOn(storeWithAdmin, "admin").mockReturnValue(admin);
 
     await expect(store.resetAccessCode(adminIdentity, targetUser.id))
       .rejects.toMatchObject({ message: "auth update failed" });
@@ -132,7 +133,8 @@ describe("Supabase auth lifecycle compensation", () => {
 
     const store = new SupabaseStore();
     vi.spyOn(store, "listUsers").mockResolvedValue([targetUser]);
-    vi.spyOn(store as never, "admin" as never).mockReturnValue(admin as never);
+    const storeWithAdmin = store as unknown as { admin: () => typeof admin };
+    vi.spyOn(storeWithAdmin, "admin").mockReturnValue(admin);
 
     await expect(store.disableUser(adminIdentity, targetUser.id))
       .rejects.toMatchObject({ message: "credential update failed" });
