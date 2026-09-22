@@ -37,6 +37,7 @@ function makeAdmin(input: {
   profiles: QueryResponse[];
   credentials: QueryResponse[];
   authUpdateError?: { message: string } | null;
+  authUpdateThrow?: Error;
 }) {
   const calls: Call[] = [];
   const queues: Record<string, QueryResponse[]> = {
@@ -44,20 +45,21 @@ function makeAdmin(input: {
     access_credentials: [...input.credentials],
   };
 
+  const updateUserById = vi.fn(async () => {
+    if (input.authUpdateThrow) throw input.authUpdateThrow;
+    return { data: { user: { id: "student-1" } }, error: input.authUpdateError ?? null };
+  });
+
   const admin = {
     from: vi.fn((table: string) => {
       const response = queues[table]?.shift();
       if (!response) throw new Error(`Unexpected query for ${table}`);
       return makeBuilder(table, response, calls);
     }),
-    auth: {
-      admin: {
-        updateUserById: vi.fn(async () => ({ data: { user: null }, error: input.authUpdateError ?? null })),
-      },
-    },
+    auth: { admin: { updateUserById } },
   };
 
-  return { admin, calls };
+  return { admin, calls, updateUserById };
 }
 
 const adminIdentity: Identity = {
@@ -76,16 +78,131 @@ const targetUser: UserRecord = {
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
+function installAdmin(store: SupabaseStore, admin: unknown) {
+  vi.spyOn(store, "listUsers").mockResolvedValue([targetUser]);
+  const storeWithAdmin = store as unknown as { admin: () => typeof admin };
+  vi.spyOn(storeWithAdmin, "admin").mockReturnValue(admin);
+}
+
+function profileUpdates(calls: Call[]) {
+  return calls.filter((call) => call.table === "profiles" && call.method === "update");
+}
+
+function credentialUpdates(calls: Call[]) {
+  return calls.filter((call) => call.table === "access_credentials" && call.method === "update");
+}
+
 describe("Supabase auth lifecycle compensation", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
-  it("restores the prior watermark and credential state when Auth reset fails late", async () => {
-    const { admin, calls } = makeAdmin({
+  it("may restore the previous state on a pre-Auth DB failure", async () => {
+    const { admin, calls, updateUserById } = makeAdmin({
       profiles: [
-        { data: { session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
+        { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
+        { error: null },
+        { error: null },
+      ],
+      credentials: [
+        { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
+        { error: null },
+        { error: { message: "insert failed" } },
+        { error: null },
+      ],
+    });
+
+    const store = new SupabaseStore();
+    installAdmin(store, admin);
+
+    await expect(store.resetAccessCode(adminIdentity, targetUser.id))
+      .rejects.toMatchObject({ message: "insert failed" });
+
+    expect(updateUserById).not.toHaveBeenCalled();
+
+    const pUpdates = profileUpdates(calls);
+    expect(pUpdates).toHaveLength(2);
+    expect(pUpdates[0].payload).toMatchObject({ status: "disabled" });
+    expect(pUpdates[1].payload).toEqual({
+      status: "active",
+      session_invalid_before: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(credentialUpdates(calls)).toContainEqual({
+      table: "access_credentials",
+      method: "update",
+      payload: { state: "active", disabled_at: null },
+    });
+  });
+
+  it("does not restore old session or credential state after an attempted Auth call returns an error", async () => {
+    const { admin, calls, updateUserById } = makeAdmin({
+      profiles: [
+        { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
+        { error: null },
+      ],
+      credentials: [
+        { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
+        { error: null },
+        { data: { id: "new-cred" }, error: null },
+      ],
+      authUpdateError: { message: "ambiguous auth failure" },
+    });
+
+    const store = new SupabaseStore();
+    installAdmin(store, admin);
+
+    await expect(store.resetAccessCode(adminIdentity, targetUser.id))
+      .rejects.toMatchObject({ message: "ambiguous auth failure" });
+
+    expect(updateUserById).toHaveBeenCalledTimes(1);
+    expect(profileUpdates(calls)).toHaveLength(1);
+    expect(profileUpdates(calls)[0].payload).toMatchObject({ status: "disabled" });
+
+    const updates = credentialUpdates(calls);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].payload).toMatchObject({ state: "disabled" });
+    expect(updates).not.toContainEqual(expect.objectContaining({
+      payload: { state: "active", disabled_at: null },
+    }));
+  });
+
+  it("stays fail-secure when the attempted Auth call throws a transport-style error", async () => {
+    const { admin, calls, updateUserById } = makeAdmin({
+      profiles: [
+        { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
+        { error: null },
+      ],
+      credentials: [
+        { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
+        { error: null },
+        { data: { id: "new-cred" }, error: null },
+      ],
+      authUpdateThrow: new Error("transport lost"),
+    });
+
+    const store = new SupabaseStore();
+    installAdmin(store, admin);
+
+    await expect(store.resetAccessCode(adminIdentity, targetUser.id))
+      .rejects.toThrow("transport lost");
+
+    expect(updateUserById).toHaveBeenCalledTimes(1);
+    expect(profileUpdates(calls)).toHaveLength(1);
+    expect(profileUpdates(calls)[0].payload).toMatchObject({ status: "disabled" });
+    expect(credentialUpdates(calls)).toHaveLength(1);
+    expect(credentialUpdates(calls)[0].payload).toMatchObject({ state: "disabled" });
+  });
+
+  it("writes a fresh final watermark after successful Auth mutation", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-22T21:30:00.500Z"));
+
+    const { admin, calls, updateUserById } = makeAdmin({
+      profiles: [
+        { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
         { error: null },
         { error: null },
       ],
@@ -93,36 +210,95 @@ describe("Supabase auth lifecycle compensation", () => {
         { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
         { error: null },
         { data: { id: "new-cred" }, error: null },
-        { error: null },
-        { error: null },
       ],
-      authUpdateError: { message: "auth update failed" },
     });
 
     const store = new SupabaseStore();
-    vi.spyOn(store, "listUsers").mockResolvedValue([targetUser]);
-    const storeWithAdmin = store as unknown as { admin: () => typeof admin };
-    vi.spyOn(storeWithAdmin, "admin").mockReturnValue(admin);
+    installAdmin(store, admin);
+
+    const result = await store.resetAccessCode(adminIdentity, targetUser.id);
+
+    expect(updateUserById).toHaveBeenCalledTimes(1);
+    expect(result.code).toBe("BSR-ZX90-AB12CD34");
+
+    const pUpdates = profileUpdates(calls);
+    expect(pUpdates).toHaveLength(2);
+
+    const initial = pUpdates[0].payload as Record<string, unknown>;
+    const final = pUpdates[1].payload as Record<string, unknown>;
+    expect(initial.status).toBe("disabled");
+    expect(final.status).toBe("active");
+    expect(new Date(String(final.session_invalid_before)).getTime())
+      .toBeGreaterThan(new Date(String(initial.session_invalid_before)).getTime());
+    expect(result.user.sessionInvalidBefore).toBe(final.session_invalid_before);
+  });
+
+  it("does not roll back security state when the final watermark write fails", async () => {
+    const { admin, calls, updateUserById } = makeAdmin({
+      profiles: [
+        { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
+        { error: null },
+        { error: { message: "final watermark failed" } },
+      ],
+      credentials: [
+        { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
+        { error: null },
+        { data: { id: "new-cred" }, error: null },
+      ],
+    });
+
+    const store = new SupabaseStore();
+    installAdmin(store, admin);
 
     await expect(store.resetAccessCode(adminIdentity, targetUser.id))
-      .rejects.toMatchObject({ message: "auth update failed" });
+      .rejects.toMatchObject({ message: "final watermark failed" });
 
-    const profileUpdates = calls.filter((call) => call.table === "profiles" && call.method === "update");
-    expect(profileUpdates).toHaveLength(2);
-    expect(profileUpdates[1].payload).toEqual({
-      session_invalid_before: "2026-01-01T00:00:00.000Z",
-    });
+    expect(updateUserById).toHaveBeenCalledTimes(1);
+    expect(profileUpdates(calls)).toHaveLength(2);
 
-    expect(calls).toContainEqual({
-      table: "access_credentials",
-      method: "delete",
-      payload: undefined,
-    });
-    expect(calls).toContainEqual({
-      table: "access_credentials",
-      method: "update",
+    const updates = credentialUpdates(calls);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].payload).toMatchObject({ state: "disabled" });
+    expect(updates).not.toContainEqual(expect.objectContaining({
       payload: { state: "active", disabled_at: null },
+    }));
+  });
+
+  it("places the effective final boundary after every token minted in the reset window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-22T21:30:00.500Z"));
+
+    const { admin, calls } = makeAdmin({
+      profiles: [
+        { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
+        { error: null },
+        { error: null },
+      ],
+      credentials: [
+        { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
+        { error: null },
+        { data: { id: "new-cred" }, error: null },
+      ],
     });
+
+    const store = new SupabaseStore();
+    installAdmin(store, admin);
+    await store.resetAccessCode(adminIdentity, targetUser.id);
+
+    const pUpdates = profileUpdates(calls);
+    const resetStartedAt = new Date(String(
+      (pUpdates[0].payload as Record<string, unknown>).session_invalid_before,
+    )).getTime();
+    const finalInvalidBefore = new Date(String(
+      (pUpdates[1].payload as Record<string, unknown>).session_invalid_before,
+    )).getTime();
+
+    // JWT iat has second precision. session_is_current() subtracts one second
+    // from the watermark, so model the newest possible token minted pre-finalize.
+    const newestWindowTokenIatMs = Math.floor(resetStartedAt / 1000) * 1000;
+    const effectiveFinalBoundary = finalInvalidBefore - 1000;
+
+    expect(newestWindowTokenIatMs).toBeLessThan(effectiveFinalBoundary);
   });
 
   it("surfaces credential bookkeeping failure without re-enabling a disabled profile", async () => {
@@ -132,15 +308,13 @@ describe("Supabase auth lifecycle compensation", () => {
     });
 
     const store = new SupabaseStore();
-    vi.spyOn(store, "listUsers").mockResolvedValue([targetUser]);
-    const storeWithAdmin = store as unknown as { admin: () => typeof admin };
-    vi.spyOn(storeWithAdmin, "admin").mockReturnValue(admin);
+    installAdmin(store, admin);
 
     await expect(store.disableUser(adminIdentity, targetUser.id))
       .rejects.toMatchObject({ message: "credential update failed" });
 
-    const profileUpdates = calls.filter((call) => call.table === "profiles" && call.method === "update");
-    expect(profileUpdates).toHaveLength(1);
-    expect(profileUpdates[0].payload).toMatchObject({ status: "disabled" });
+    const pUpdates = profileUpdates(calls);
+    expect(pUpdates).toHaveLength(1);
+    expect(pUpdates[0].payload).toMatchObject({ status: "disabled" });
   });
 });
