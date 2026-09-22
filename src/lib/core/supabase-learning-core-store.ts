@@ -247,8 +247,9 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
 
     const unitRows = (unitResult.data ?? []) as Row[];
     const visibleUnitIds = new Set(unitRows.map((row) => String(row.id)));
+    const isLearningCoreSubject = !subjectRow.group_id;
     const lessonRows = ((lessonResult.data ?? []) as Row[]).filter(
-      (row) => !isStudent || visibleUnitIds.has(String(row.unit_id)),
+      (row) => !isStudent || !isLearningCoreSubject || visibleUnitIds.has(String(row.unit_id)),
     );
 
     return {
@@ -477,10 +478,11 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     const unitRows = (unitsResult.data ?? []) as Row[];
     const unitOrder = new Map(unitRows.map((row) => [String(row.id), Number(row.display_order)]));
     const visibleUnitIds = new Set(unitRows.map((row) => String(row.id)));
+    const isLearningCoreSubject = !subjectRow.group_id;
     const completed = new Set(((progressResult.data ?? []) as Row[]).map((row) => String(row.lesson_id)));
 
     return ((lessonsResult.data ?? []) as Row[])
-      .filter((row) => !isStudent || visibleUnitIds.has(String(row.unit_id)))
+      .filter((row) => !isStudent || !isLearningCoreSubject || visibleUnitIds.has(String(row.unit_id)))
       .sort((left, right) => (unitOrder.get(String(left.unit_id)) ?? 0) - (unitOrder.get(String(right.unit_id)) ?? 0) ||
         Number(left.display_order) - Number(right.display_order))
       .map((row, index) => ({
