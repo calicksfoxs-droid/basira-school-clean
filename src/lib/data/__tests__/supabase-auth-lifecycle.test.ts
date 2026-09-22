@@ -103,14 +103,14 @@ describe("Supabase auth lifecycle compensation", () => {
     const { admin, calls, updateUserById } = makeAdmin({
       profiles: [
         { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
-        { error: null },
-        { error: null },
+        { data: { id: "student-1" }, error: null },
+        { data: { id: "student-1" }, error: null },
       ],
       credentials: [
         { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
         { error: null },
         { error: { message: "insert failed" } },
-        { error: null },
+        { data: { id: "old-cred" }, error: null },
       ],
     });
 
@@ -141,7 +141,7 @@ describe("Supabase auth lifecycle compensation", () => {
     const { admin, calls, updateUserById } = makeAdmin({
       profiles: [
         { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
-        { error: null },
+        { data: { id: "student-1" }, error: null },
       ],
       credentials: [
         { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
@@ -173,7 +173,7 @@ describe("Supabase auth lifecycle compensation", () => {
     const { admin, calls, updateUserById } = makeAdmin({
       profiles: [
         { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
-        { error: null },
+        { data: { id: "student-1" }, error: null },
       ],
       credentials: [
         { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
@@ -203,8 +203,8 @@ describe("Supabase auth lifecycle compensation", () => {
     const { admin, calls, updateUserById } = makeAdmin({
       profiles: [
         { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
-        { error: null },
-        { error: null },
+        { data: { id: "student-1" }, error: null },
+        { data: { id: "student-1" }, error: null },
       ],
       credentials: [
         { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
@@ -237,7 +237,7 @@ describe("Supabase auth lifecycle compensation", () => {
     const { admin, calls, updateUserById } = makeAdmin({
       profiles: [
         { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
-        { error: null },
+        { data: { id: "student-1" }, error: null },
         { error: { message: "final watermark failed" } },
       ],
       credentials: [
@@ -264,6 +264,31 @@ describe("Supabase auth lifecycle compensation", () => {
     }));
   });
 
+  it("does not overwrite a concurrent disable or newer profile state at finalization", async () => {
+    const { admin, calls } = makeAdmin({
+      profiles: [
+        { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
+        { data: { id: "student-1" }, error: null },
+        { data: null, error: null },
+      ],
+      credentials: [
+        { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
+        { error: null },
+        { data: { id: "new-cred" }, error: null },
+      ],
+    });
+
+    const store = new SupabaseStore();
+    installAdmin(store, admin);
+
+    await expect(store.resetAccessCode(adminIdentity, targetUser.id))
+      .rejects.toThrow("Access reset state changed before finalization");
+
+    expect(profileUpdates(calls)).toHaveLength(2);
+    expect(credentialUpdates(calls)).toHaveLength(1);
+    expect(credentialUpdates(calls)[0].payload).toMatchObject({ state: "disabled" });
+  });
+
   it("places the effective final boundary after every token minted in the reset window", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-22T21:30:00.500Z"));
@@ -271,8 +296,8 @@ describe("Supabase auth lifecycle compensation", () => {
     const { admin, calls } = makeAdmin({
       profiles: [
         { data: { status: "active", session_invalid_before: "2026-01-01T00:00:00.000Z" }, error: null },
-        { error: null },
-        { error: null },
+        { data: { id: "student-1" }, error: null },
+        { data: { id: "student-1" }, error: null },
       ],
       credentials: [
         { data: [{ id: "old-cred", state: "active", disabled_at: null }], error: null },
