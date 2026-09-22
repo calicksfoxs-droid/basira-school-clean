@@ -384,7 +384,12 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     if (error) throw error;
   }
   async publishUnitLesson(identity: Identity, lessonId: string): Promise<void> { const { client } = await this.lessonForWrite(identity, lessonId); const { error } = await client.from("lessons").update({ status: "published", published_at: new Date().toISOString() }).eq("id", lessonId); if (error) throw error; }
-  async completeLearningLesson(identity: Identity, lessonId: string): Promise<void> { assertAllowed(identity.role === "student"); const client = this.admin(); const { data: lesson, error: lessonError } = await client.from("lessons").select("subject_id,status").eq("id", lessonId).single(); if (lessonError) throw lessonError; assertAllowed(String((lesson as Row).status) === "published"); const { data: subject, error: subjectError } = await client.from("subjects").select("*").eq("id", String((lesson as Row).subject_id)).single(); if (subjectError) throw subjectError; await this.assertSubjectReadable(identity, subject as Row); const { error } = await client.from("learning_progress").upsert({ student_id: identity.userId, subject_id: String((lesson as Row).subject_id), lesson_id: lessonId, completed_at: new Date().toISOString() }, { onConflict: "student_id,lesson_id" }); if (error) throw error; }
+  async completeLearningLesson(identity: Identity, lessonId: string): Promise<void> {
+    assertAllowed(identity.role === "student");
+    const client = await this.client();
+    const { error } = await client.rpc("complete_learning_lesson_v1", { p_lesson_id: lessonId });
+    if (error) throw error;
+  }
 
   async enrollStudentByReference(_identity: Identity, input: { groupId: string; enrollmentReference: string }): Promise<{ studentId: string; displayName: string }> {
     const client = await this.client();
@@ -453,40 +458,46 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
   }
 
   async getLearningJourney(identity: Identity, subjectId: string): Promise<LearningJourneyNode[]> {
-    const isStudent = identity.role === "student";
-    const client = isStudent ? await this.client() : this.admin();
+    if (identity.role === "student") {
+      const client = await this.client();
+      const { data, error } = await client.rpc("get_learning_journey_v1", { p_subject_id: subjectId });
+      if (error) throw error;
+      return ((data ?? []) as Row[]).map((row) => ({
+        lessonId: String(row.lesson_id),
+        unitId: String(row.unit_id),
+        order: Number(row.lesson_order),
+        state: String(row.state) as LearningJourneyNode["state"],
+      }));
+    }
+
+    const client = this.admin();
     const { data: subject, error: subjectError } = await client.from("subjects").select("*").eq("id", subjectId).maybeSingle();
     if (subjectError) throw subjectError;
     const subjectRow = assertFound(subject as Row | null);
     await this.assertSubjectReadable(identity, subjectRow);
 
-    let unitsQuery = client.from("subject_units").select("id,display_order").eq("subject_id", subjectId);
-    if (isStudent) unitsQuery = unitsQuery.eq("status", "published");
-
-    let lessonsQuery = client.from("lessons").select("id,unit_id,status,display_order").eq("subject_id", subjectId);
-    if (isStudent) lessonsQuery = lessonsQuery.eq("status", "published");
-
     const [unitsResult, lessonsResult, progressResult] = await Promise.all([
-      unitsQuery.order("display_order"),
-      lessonsQuery,
+      client.from("subject_units").select("id,term_segment,display_order,status").eq("subject_id", subjectId).neq("status", "archived"),
+      client.from("lessons").select("id,unit_id,status,display_order").eq("subject_id", subjectId).neq("status", "archived"),
       client.from("learning_progress").select("lesson_id").eq("student_id", identity.userId).eq("subject_id", subjectId),
     ]);
     if (unitsResult.error) throw unitsResult.error;
     if (lessonsResult.error) throw lessonsResult.error;
     if (progressResult.error) throw progressResult.error;
 
-    const unitRows = (unitsResult.data ?? []) as Row[];
-    const unitOrder = new Map(unitRows.map((row) => [String(row.id), Number(row.display_order)]));
-    const visibleUnitIds = new Set(unitRows.map((row) => String(row.id)));
-    const isLearningCoreSubject = !subjectRow.group_id;
+    const unitOrder = new Map(((unitsResult.data ?? []) as Row[])
+      .sort((left, right) => Number(left.term_segment) - Number(right.term_segment) ||
+        Number(left.display_order) - Number(right.display_order))
+      .map((row, index) => [String(row.id), index]));
     const completed = new Set(((progressResult.data ?? []) as Row[]).map((row) => String(row.lesson_id)));
 
     return ((lessonsResult.data ?? []) as Row[])
-      .filter((row) => !isStudent || !isLearningCoreSubject || visibleUnitIds.has(String(row.unit_id)))
       .sort((left, right) => (unitOrder.get(String(left.unit_id)) ?? 0) - (unitOrder.get(String(right.unit_id)) ?? 0) ||
         Number(left.display_order) - Number(right.display_order))
       .map((row, index) => ({
-        lessonId: String(row.id), unitId: String(row.unit_id), order: index + 1,
+        lessonId: String(row.id),
+        unitId: String(row.unit_id),
+        order: index + 1,
         state: completed.has(String(row.id)) ? "completed" : String(row.status) === "published" ? "available" : "locked",
       }));
   }
