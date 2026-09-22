@@ -39,6 +39,7 @@ function makeClients(input?: {
   signInError?: { message: string } | null;
   profile?: { display_name: string; role: string; status: string } | null;
   updateError?: { message: string } | null;
+  activationResults?: Array<{ data: { id: string } | null; error: { message: string } | null }>;
 }) {
   const credential: Credential | null = input?.credential === null ? null : {
     id: "cred-1",
@@ -52,30 +53,44 @@ function makeClients(input?: {
 
   const updatePayloads: unknown[] = [];
   const updateFilters: Array<[string, unknown]> = [];
+  const activationResults = [...(input?.activationResults ?? [{
+    data: { id: "cred-1" },
+    error: input?.updateError ?? null,
+  }])];
+  let adminFromCall = 0;
   const admin = {
     from: vi.fn((table: string) => {
       if (table !== "access_credentials") throw new Error(`unexpected admin table ${table}`);
-      return {
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            maybeSingle: vi.fn(async () => ({
-              data: credential,
-              error: input?.credentialLookupError ?? null,
+      adminFromCall += 1;
+
+      if (adminFromCall === 1) {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn(async () => ({
+                data: credential,
+                error: input?.credentialLookupError ?? null,
+              })),
             })),
           })),
-        })),
+        };
+      }
+
+      return {
         update: vi.fn((payload: unknown) => {
           updatePayloads.push(payload);
-          const secondEq = vi.fn(async (field: string, value: unknown) => {
-            updateFilters.push([field, value]);
-            return { error: input?.updateError ?? null };
-          });
-          return {
+          const result = activationResults.shift() ?? { data: null, error: null };
+          const builder = {
             eq: vi.fn((field: string, value: unknown) => {
               updateFilters.push([field, value]);
-              return { eq: secondEq };
+              return builder;
             }),
+            neq: vi.fn(() => builder),
+            is: vi.fn(() => builder),
+            select: vi.fn(() => builder),
+            maybeSingle: vi.fn(async () => result),
           };
+          return builder;
         }),
       };
     }),
@@ -171,6 +186,36 @@ describe("Supabase access-code login control plane", () => {
       .toEqual({ ok: false, error: "رمز الدخول غير صالح" });
     expect(roleMismatch.signOut).toHaveBeenCalledTimes(1);
     expect(roleMismatch.updatePayloads).toHaveLength(0);
+  });
+
+  it("preserves a concurrent winner's first_used_at and retries without overwriting it", async () => {
+    const ctx = makeClients({
+      activationResults: [
+        { data: null, error: null },
+        { data: { id: "cred-1" }, error: null },
+      ],
+    });
+
+    const result = await loginWithAccessCode("BSR-AB12-CD34EF56");
+
+    expect(result.ok).toBe(true);
+    expect(ctx.updatePayloads).toHaveLength(2);
+    expect(ctx.updatePayloads[0]).toMatchObject({ state: "active", first_used_at: expect.any(String) });
+    expect(ctx.updatePayloads[1]).toEqual({ state: "active" });
+  });
+
+  it("fails closed if the credential becomes disabled during activation", async () => {
+    const ctx = makeClients({
+      activationResults: [
+        { data: null, error: null },
+        { data: null, error: null },
+      ],
+    });
+
+    const result = await loginWithAccessCode("BSR-AB12-CD34EF56");
+
+    expect(result).toEqual({ ok: false, error: "رمز الدخول غير صالح" });
+    expect(ctx.signOut).toHaveBeenCalledTimes(1);
   });
 
   it("signs out and fails closed if exact credential activation fails", async () => {
