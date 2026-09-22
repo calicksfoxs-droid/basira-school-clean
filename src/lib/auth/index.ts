@@ -25,11 +25,31 @@ export async function loginWithAccessCode(code: string): Promise<{ ok: true; ide
     return { ok: true, identity };
   }
 
+  const admin = createAdminSupabaseClient();
+  const { data: credential, error: credentialError } = await admin
+    .from("access_credentials")
+    .select("id,auth_user_id,synthetic_email,role,state,first_used_at")
+    .eq("public_account_ref", parsed.publicRef)
+    .maybeSingle();
+
+  if (credentialError || !credential || credential.state === "disabled") {
+    if (credentialError) console.error("Supabase access credential lookup failed", credentialError.message);
+    return { ok: false, error: "رمز الدخول غير صالح" };
+  }
+
   const supabase = await createServerSupabaseClient();
-  const email = `basira.${parsed.publicRef.toLowerCase()}@access.invalid`;
-  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password: parsed.secret });
+  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+    email: String(credential.synthetic_email),
+    password: parsed.secret,
+  });
   if (signInError || !signInData.user) {
     console.error("Supabase access-code sign-in failed", signInError?.message ?? "No user returned");
+    return { ok: false, error: "رمز الدخول غير صالح" };
+  }
+
+  if (signInData.user.id !== String(credential.auth_user_id)) {
+    await supabase.auth.signOut();
+    console.error("Supabase access-code credential user mismatch");
     return { ok: false, error: "رمز الدخول غير صالح" };
   }
 
@@ -38,21 +58,49 @@ export async function loginWithAccessCode(code: string): Promise<{ ok: true; ide
     .select("display_name, role, status")
     .eq("id", signInData.user.id)
     .maybeSingle();
-  if (profileError || !profile || profile.status === "disabled") {
+  if (profileError || !profile || profile.status !== "active") {
     await supabase.auth.signOut();
     return { ok: false, error: "رمز الدخول غير صالح" };
   }
 
-  const admin = createAdminSupabaseClient();
+  let profileRole: Role;
+  let credentialRole: Role;
+  try {
+    profileRole = normalizeRole(String(profile.role));
+    credentialRole = normalizeRole(String(credential.role));
+  } catch {
+    await supabase.auth.signOut();
+    return { ok: false, error: "رمز الدخول غير صالح" };
+  }
+
+  if (profileRole !== credentialRole) {
+    await supabase.auth.signOut();
+    console.error("Supabase access-code credential role mismatch");
+    return { ok: false, error: "رمز الدخول غير صالح" };
+  }
+
+  const credentialUpdate: { state: "active"; first_used_at?: string } = { state: "active" };
+  if (!credential.first_used_at) credentialUpdate.first_used_at = new Date().toISOString();
+
   const { error: credentialUpdateError } = await admin
     .from("access_credentials")
-    .update({ state: "active", first_used_at: new Date().toISOString() })
+    .update(credentialUpdate)
+    .eq("id", credential.id)
     .eq("auth_user_id", signInData.user.id);
-  if (credentialUpdateError) console.error("Supabase access credential update failed", credentialUpdateError.message);
+  if (credentialUpdateError) {
+    console.error("Supabase access credential update failed", credentialUpdateError.message);
+    await supabase.auth.signOut();
+    return { ok: false, error: "رمز الدخول غير صالح" };
+  }
 
   return {
     ok: true,
-    identity: { userId: signInData.user.id, displayName: profile.display_name, role: normalizeRole(profile.role), status: profile.status },
+    identity: {
+      userId: signInData.user.id,
+      displayName: profile.display_name,
+      role: profileRole,
+      status: profile.status,
+    },
   };
 }
 
