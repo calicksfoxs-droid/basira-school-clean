@@ -19,7 +19,7 @@ type SupabaseAccessCredential = {
 type SupabaseProfile = {
   display_name: string;
   role: string;
-  status: string;
+  status: "active" | "disabled";
 };
 
 const invalidAccessCode = () => ({ ok: false, error: "رمز الدخول غير صالح" } as const);
@@ -160,7 +160,7 @@ export async function loginWithAccessCode(code: string): Promise<{ ok: true; ide
       userId: signInData.user.id,
       displayName: resolvedProfile.profile.display_name,
       role: resolvedProfile.role,
-      status: resolvedProfile.profile.status,
+      status: "active",
     },
   };
 }
