@@ -81,15 +81,19 @@ function makeClients(input?: {
           updatePayloads.push(payload);
           const result = activationResults.shift() ?? { data: null, error: null };
           const builder = {
-            eq: vi.fn((field: string, value: unknown) => {
-              updateFilters.push([field, value]);
-              return builder;
-            }),
-            neq: vi.fn(() => builder),
-            is: vi.fn(() => builder),
-            select: vi.fn(() => builder),
+            eq: vi.fn(),
+            neq: vi.fn(),
+            is: vi.fn(),
+            select: vi.fn(),
             maybeSingle: vi.fn(async () => result),
           };
+          builder.eq.mockImplementation((field: string, value: unknown) => {
+            updateFilters.push([field, value]);
+            return builder;
+          });
+          builder.neq.mockImplementation(() => builder);
+          builder.is.mockImplementation(() => builder);
+          builder.select.mockImplementation(() => builder);
           return builder;
         }),
       };
