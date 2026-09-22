@@ -238,21 +238,31 @@ export class SupabaseStore implements BasiraStore {
       const compensationErrors: string[] = [];
 
       for (const previous of previousCredentials ?? []) {
-        const { error } = await admin
+        const { data, error } = await admin
           .from("access_credentials")
           .update({ state: previous.state, disabled_at: previous.disabled_at })
-          .eq("id", previous.id);
+          .eq("id", previous.id)
+          .eq("state", "disabled")
+          .eq("disabled_at", resetStartedAt)
+          .select("id")
+          .maybeSingle();
         if (error) compensationErrors.push(`restore-credential-${previous.id}: ${error.message}`);
+        else if (!data) compensationErrors.push(`restore-credential-${previous.id}: state superseded`);
       }
 
-      const { error: profileRestoreError } = await admin
+      const { data: restoredProfile, error: profileRestoreError } = await admin
         .from("profiles")
         .update({
           status: previousStatus,
           session_invalid_before: previousInvalidBefore,
         })
-        .eq("id", userId);
+        .eq("id", userId)
+        .eq("status", "disabled")
+        .eq("session_invalid_before", resetStartedAt)
+        .select("id")
+        .maybeSingle();
       if (profileRestoreError) compensationErrors.push(`restore-profile: ${profileRestoreError.message}`);
+      else if (!restoredProfile) compensationErrors.push("restore-profile: reset lock superseded");
 
       if (compensationErrors.length) {
         console.error("Supabase access reset compensation incomplete", compensationErrors.join("; "));
@@ -261,14 +271,19 @@ export class SupabaseStore implements BasiraStore {
 
     // Lock authorization before changing credential/Auth state. This closes the
     // reset window even if an old access code races with the reset.
-    const { error: profileLockError } = await admin
+    const { data: lockedProfile, error: profileLockError } = await admin
       .from("profiles")
       .update({
         status: "disabled",
         session_invalid_before: resetStartedAt,
       })
-      .eq("id", userId);
+      .eq("id", userId)
+      .eq("status", previousStatus)
+      .eq("session_invalid_before", previousInvalidBefore)
+      .select("id")
+      .maybeSingle();
     if (profileLockError) throw profileLockError;
+    if (!lockedProfile) throw new Error("Access reset state changed before lock acquisition");
 
     const { error: disableError } = await admin
       .from("access_credentials")
@@ -319,18 +334,25 @@ export class SupabaseStore implements BasiraStore {
     // Move the final watermark 1001 ms ahead so every token minted during the
     // reset window remains older than the effective post-tolerance boundary.
     const finalInvalidBefore = new Date(Date.now() + 1001).toISOString();
-    const { error: finalProfileError } = await admin
+    const { data: finalizedProfile, error: finalProfileError } = await admin
       .from("profiles")
       .update({
         status: previousStatus,
         session_invalid_before: finalInvalidBefore,
       })
-      .eq("id", userId);
+      .eq("id", userId)
+      .eq("status", "disabled")
+      .eq("session_invalid_before", resetStartedAt)
+      .select("id")
+      .maybeSingle();
 
     if (finalProfileError) {
       // Keep the profile disabled and old credentials disabled. Recovery must be
       // an explicit later reset; security state must never roll backward here.
       throw finalProfileError;
+    }
+    if (!finalizedProfile) {
+      throw new Error("Access reset state changed before finalization");
     }
 
     return {
