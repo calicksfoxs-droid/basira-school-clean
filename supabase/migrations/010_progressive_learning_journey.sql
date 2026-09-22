@@ -174,7 +174,7 @@ begin
   where p.id = v_student_id
   for update;
 
-  if not found then
+  if not found or not public.session_is_current() then
     raise exception 'Not allowed' using errcode = '42501';
   end if;
 
