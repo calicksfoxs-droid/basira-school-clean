@@ -1,0 +1,20 @@
+name: PR5 Temporary Verify
+
+on:
+  push:
+    branches:
+      - phase1/auth-session-access-code-fix
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx vitest run __tests__/lib/auth-access-code.test.ts src/lib/data/__tests__/supabase-auth-lifecycle.test.ts
