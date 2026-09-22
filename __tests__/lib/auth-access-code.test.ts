@@ -105,8 +105,12 @@ function makeClients(input?: {
     }),
   };
 
-  vi.mocked(createAdminSupabaseClient).mockReturnValue(admin as never);
-  vi.mocked(createServerSupabaseClient).mockResolvedValue(server as never);
+  vi.mocked(createAdminSupabaseClient).mockReturnValue(
+    admin as unknown as ReturnType<typeof createAdminSupabaseClient>,
+  );
+  vi.mocked(createServerSupabaseClient).mockResolvedValue(
+    server as unknown as Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  );
 
   return { admin, server, signOut, signInWithPassword, updatePayloads, updateFilters };
 }
