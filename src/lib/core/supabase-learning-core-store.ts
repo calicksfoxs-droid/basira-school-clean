@@ -464,7 +464,7 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
       if (error) throw error;
       return ((data ?? []) as Row[]).map((row) => ({
         lessonId: String(row.lesson_id),
-        unitId: optionalString(row.unit_id) ?? "",
+        unitId: String(row.unit_id),
         order: Number(row.lesson_order),
         state: String(row.state) as LearningJourneyNode["state"],
       }));
@@ -496,7 +496,7 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
         Number(left.display_order) - Number(right.display_order))
       .map((row, index) => ({
         lessonId: String(row.id),
-        unitId: optionalString(row.unit_id) ?? "",
+        unitId: String(row.unit_id),
         order: index + 1,
         state: completed.has(String(row.id)) ? "completed" : String(row.status) === "published" ? "available" : "locked",
       }));
