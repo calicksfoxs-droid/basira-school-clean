@@ -79,16 +79,32 @@ export async function loginWithAccessCode(code: string): Promise<{ ok: true; ide
     return { ok: false, error: "رمز الدخول غير صالح" };
   }
 
-  const credentialUpdate: { state: "active"; first_used_at?: string } = { state: "active" };
-  if (!credential.first_used_at) credentialUpdate.first_used_at = new Date().toISOString();
+  const activateCredential = async (writeFirstUse: boolean) => {
+    let query = admin
+      .from("access_credentials")
+      .update(writeFirstUse
+        ? { state: "active", first_used_at: new Date().toISOString() }
+        : { state: "active" })
+      .eq("id", credential.id)
+      .eq("auth_user_id", signInData.user.id)
+      .neq("state", "disabled");
 
-  const { error: credentialUpdateError } = await admin
-    .from("access_credentials")
-    .update(credentialUpdate)
-    .eq("id", credential.id)
-    .eq("auth_user_id", signInData.user.id);
-  if (credentialUpdateError) {
-    console.error("Supabase access credential update failed", credentialUpdateError.message);
+    if (writeFirstUse) query = query.is("first_used_at", null);
+    return query.select("id").maybeSingle();
+  };
+
+  let activation = await activateCredential(!credential.first_used_at);
+  if (!activation.error && !activation.data && !credential.first_used_at) {
+    // Another concurrent successful login may have won the first-use timestamp.
+    // Retry without touching first_used_at, while still refusing disabled rows.
+    activation = await activateCredential(false);
+  }
+
+  if (activation.error || !activation.data) {
+    console.error(
+      "Supabase access credential update failed",
+      activation.error?.message ?? "Credential is no longer active",
+    );
     await supabase.auth.signOut();
     return { ok: false, error: "رمز الدخول غير صالح" };
   }
