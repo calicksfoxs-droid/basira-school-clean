@@ -223,23 +223,39 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
   }
 
   async getLearningSubject(identity: Identity, subjectId: string): Promise<LearningSubjectDetails> {
-    const client = this.admin();
+    const isStudent = identity.role === "student";
+    const client = isStudent ? await this.client() : this.admin();
+
+    let unitQuery = client.from("subject_units").select("*").eq("subject_id", subjectId);
+    unitQuery = isStudent ? unitQuery.eq("status", "published") : unitQuery.neq("status", "archived");
+
+    let lessonQuery = client.from("lessons").select("*").eq("subject_id", subjectId);
+    lessonQuery = isStudent ? lessonQuery.eq("status", "published") : lessonQuery.neq("status", "archived");
+
     const [subjectResult, groupResult, unitResult, lessonResult] = await Promise.all([
-      client.from("subjects").select("*").eq("id", subjectId).single(),
+      client.from("subjects").select("*").eq("id", subjectId).maybeSingle(),
       client.from("groups").select("*").eq("subject_id", subjectId).order("created_at"),
-      client.from("subject_units").select("*").eq("subject_id", subjectId).neq("status", "archived").order("term_segment").order("display_order"),
-      client.from("lessons").select("*").eq("subject_id", subjectId).neq("status", "archived").order("display_order"),
+      unitQuery.order("term_segment").order("display_order"),
+      lessonQuery.order("display_order"),
     ]);
     if (subjectResult.error) throw subjectResult.error;
-    await this.assertSubjectReadable(identity, subjectResult.data as Row);
+    const subjectRow = assertFound(subjectResult.data as Row | null);
+    await this.assertSubjectReadable(identity, subjectRow);
     if (groupResult.error) throw groupResult.error;
     if (unitResult.error) throw unitResult.error;
     if (lessonResult.error) throw lessonResult.error;
+
+    const unitRows = (unitResult.data ?? []) as Row[];
+    const visibleUnitIds = new Set(unitRows.map((row) => String(row.id)));
+    const lessonRows = ((lessonResult.data ?? []) as Row[]).filter(
+      (row) => !isStudent || visibleUnitIds.has(String(row.unit_id)),
+    );
+
     return {
-      subject: subjectFrom(subjectResult.data as Row),
+      subject: subjectFrom(subjectRow),
       groups: ((groupResult.data ?? []) as Row[]).map(groupFrom),
-      units: ((unitResult.data ?? []) as Row[]).map(unitFrom),
-      lessons: ((lessonResult.data ?? []) as Row[]).map(lessonFrom),
+      units: unitRows.map(unitFrom),
+      lessons: lessonRows.map(lessonFrom),
     };
   }
 
@@ -436,22 +452,35 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
   }
 
   async getLearningJourney(identity: Identity, subjectId: string): Promise<LearningJourneyNode[]> {
-    const client = this.admin();
-    const { data: subject, error: subjectError } = await client.from("subjects").select("*").eq("id", subjectId).single();
+    const isStudent = identity.role === "student";
+    const client = isStudent ? await this.client() : this.admin();
+    const { data: subject, error: subjectError } = await client.from("subjects").select("*").eq("id", subjectId).maybeSingle();
     if (subjectError) throw subjectError;
-    assertFound(subject);
-    await this.assertSubjectReadable(identity, subject as Row);
+    const subjectRow = assertFound(subject as Row | null);
+    await this.assertSubjectReadable(identity, subjectRow);
+
+    let unitsQuery = client.from("subject_units").select("id,display_order").eq("subject_id", subjectId);
+    if (isStudent) unitsQuery = unitsQuery.eq("status", "published");
+
+    let lessonsQuery = client.from("lessons").select("id,unit_id,status,display_order").eq("subject_id", subjectId);
+    if (isStudent) lessonsQuery = lessonsQuery.eq("status", "published");
+
     const [unitsResult, lessonsResult, progressResult] = await Promise.all([
-      client.from("subject_units").select("id,display_order").eq("subject_id", subjectId).order("display_order"),
-      client.from("lessons").select("id,unit_id,status,display_order").eq("subject_id", subjectId),
+      unitsQuery.order("display_order"),
+      lessonsQuery,
       client.from("learning_progress").select("lesson_id").eq("student_id", identity.userId).eq("subject_id", subjectId),
     ]);
     if (unitsResult.error) throw unitsResult.error;
     if (lessonsResult.error) throw lessonsResult.error;
     if (progressResult.error) throw progressResult.error;
-    const unitOrder = new Map(((unitsResult.data ?? []) as Row[]).map((row) => [String(row.id), Number(row.display_order)]));
+
+    const unitRows = (unitsResult.data ?? []) as Row[];
+    const unitOrder = new Map(unitRows.map((row) => [String(row.id), Number(row.display_order)]));
+    const visibleUnitIds = new Set(unitRows.map((row) => String(row.id)));
     const completed = new Set(((progressResult.data ?? []) as Row[]).map((row) => String(row.lesson_id)));
+
     return ((lessonsResult.data ?? []) as Row[])
+      .filter((row) => !isStudent || visibleUnitIds.has(String(row.unit_id)))
       .sort((left, right) => (unitOrder.get(String(left.unit_id)) ?? 0) - (unitOrder.get(String(right.unit_id)) ?? 0) ||
         Number(left.display_order) - Number(right.display_order))
       .map((row, index) => ({
