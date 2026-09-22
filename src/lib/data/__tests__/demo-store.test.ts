@@ -205,6 +205,68 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect((await store.listLearningSubjects(student)).some((item) => item.id === created.id)).toBe(false);
   });
 
+  it("enforces progressive learning order and rejects future completion", async () => {
+    const core = new DemoLearningCoreStore();
+
+    const subject = (await core.listLearningSubjects(student))[0];
+    const termTwoUnit = await core.createSubjectUnit(teacher, {
+      subjectId: subject.id, termSegment: 2, lessonCount: 0, title: "الفصل الثاني",
+    });
+    const termTwoLesson = await core.createUnitLesson(teacher, {
+      unitId: termTwoUnit.id, title: "درس الفصل الثاني", structureMode: "direct",
+    });
+
+    const termOneUnit = await core.createSubjectUnit(teacher, {
+      subjectId: subject.id, termSegment: 1, lessonCount: 0, title: "تكملة الفصل الأول",
+    });
+    const termOneLesson = await core.createUnitLesson(teacher, {
+      unitId: termOneUnit.id, title: "الدرس التالي", structureMode: "direct",
+    });
+
+    await core.publishUnitLesson(teacher, termTwoLesson.id);
+    await core.publishSubjectUnit(teacher, termTwoUnit.id);
+    await core.publishUnitLesson(teacher, termOneLesson.id);
+    await core.publishSubjectUnit(teacher, termOneUnit.id);
+
+    const initial = await core.getLearningJourney(student, subject.id);
+    expect(initial.map((node) => node.lessonId)).toEqual([
+      seededLessonId,
+      termOneLesson.id,
+      termTwoLesson.id,
+    ]);
+    expect(initial.map((node) => node.state)).toEqual([
+      "available",
+      "locked",
+      "locked",
+    ]);
+
+    await expect(core.completeLearningLesson(student, termTwoLesson.id))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await core.completeLearningLesson(student, seededLessonId);
+    const afterFirst = await core.getLearningJourney(student, subject.id);
+    expect(afterFirst.map((node) => node.state)).toEqual([
+      "completed",
+      "available",
+      "locked",
+    ]);
+
+    const firstCompletedAt = (await readDemoDatabase()).learningProgress
+      .find((item) => item.studentId === student.userId && item.lessonId === seededLessonId)?.completedAt;
+    await core.completeLearningLesson(student, seededLessonId);
+    const repeatedCompletedAt = (await readDemoDatabase()).learningProgress
+      .find((item) => item.studentId === student.userId && item.lessonId === seededLessonId)?.completedAt;
+    expect(repeatedCompletedAt).toBe(firstCompletedAt);
+
+    await core.completeLearningLesson(student, termOneLesson.id);
+    const afterSecond = await core.getLearningJourney(student, subject.id);
+    expect(afterSecond.map((node) => node.state)).toEqual([
+      "completed",
+      "completed",
+      "available",
+    ]);
+  });
+
   it("stores only an enrollment fingerprint and links an existing student account", async () => {
     const store = new DemoLearningCoreStore();
     const revealed = await store.rotateEnrollmentReference(student, student.userId);
