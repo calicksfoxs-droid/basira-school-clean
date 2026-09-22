@@ -60,6 +60,22 @@ function preferenceFor(database: DemoDatabase, userId: string): UserPreferences 
   return preference;
 }
 
+function orderedPublishedLearningLessons(database: DemoDatabase, subjectId: string) {
+  const units = new Map(database.learningUnits
+    .filter((unit) => unit.subjectId === subjectId && unit.status === "published")
+    .map((unit) => [unit.id, unit]));
+
+  return database.learningLessons
+    .filter((lesson) => lesson.subjectId === subjectId && lesson.status === "published" && units.has(lesson.unitId))
+    .sort((left, right) => {
+      const leftUnit = units.get(left.unitId)!;
+      const rightUnit = units.get(right.unitId)!;
+      return leftUnit.termSegment - rightUnit.termSegment ||
+        leftUnit.displayOrder - rightUnit.displayOrder ||
+        left.displayOrder - right.displayOrder;
+    });
+}
+
 export class DemoLearningCoreStore implements LearningCoreStore {
   async listCurriculumGrades(identity: Identity): Promise<CurriculumGrade[]> {
     const database = await readDemoDatabase();
@@ -294,9 +310,26 @@ export class DemoLearningCoreStore implements LearningCoreStore {
       const lesson = assertFound(database.learningLessons.find((item) => item.id === lessonId && item.status === "published"));
       const subject = assertFound(database.learningSubjects.find((item) => item.id === lesson.subjectId));
       assertAllowed(canReadSubject(database, identity, subject));
-      const existing = database.learningProgress.find((item) => item.studentId === identity.userId && item.lessonId === lessonId);
-      if (existing) existing.completedAt = now();
-      else database.learningProgress.push({ studentId: identity.userId, subjectId: lesson.subjectId, lessonId, completedAt: now() });
+
+      const ordered = orderedPublishedLearningLessons(database, subject.id);
+      assertAllowed(ordered.some((item) => item.id === lesson.id));
+
+      const existing = database.learningProgress.find((item) =>
+        item.studentId === identity.userId && item.lessonId === lessonId);
+      if (existing) return;
+
+      const completed = new Set(database.learningProgress
+        .filter((item) => item.studentId === identity.userId && item.subjectId === subject.id)
+        .map((item) => item.lessonId));
+      const next = ordered.find((item) => !completed.has(item.id));
+      assertAllowed(next?.id === lesson.id);
+
+      database.learningProgress.push({
+        studentId: identity.userId,
+        subjectId: lesson.subjectId,
+        lessonId,
+        completedAt: now(),
+      });
     });
   }
 
@@ -390,16 +423,13 @@ export class DemoLearningCoreStore implements LearningCoreStore {
     const database = await readDemoDatabase();
     const subject = assertFound(database.learningSubjects.find((candidate) => candidate.id === subjectId));
     assertAllowed(canReadSubject(database, identity, subject));
-    const unitOrder = new Map(database.learningUnits
-      .filter((unit) => unit.subjectId === subjectId && (identity.role !== "student" || unit.status === "published"))
-      .map((unit) => [unit.id, unit.displayOrder]));
-    const completed = new Set(database.learningProgress.filter((item) => item.studentId === identity.userId && item.subjectId === subjectId).map((item) => item.lessonId));
+
+    const completed = new Set(database.learningProgress
+      .filter((item) => item.studentId === identity.userId && item.subjectId === subjectId)
+      .map((item) => item.lessonId));
     let locked = false;
-    return database.learningLessons
-      .filter((lesson) => lesson.subjectId === subjectId && unitOrder.has(lesson.unitId) &&
-        (identity.role !== "student" || lesson.status === "published"))
-      .sort((left, right) => (unitOrder.get(left.unitId) ?? 0) - (unitOrder.get(right.unitId) ?? 0) ||
-        left.displayOrder - right.displayOrder)
+
+    return orderedPublishedLearningLessons(database, subjectId)
       .map((lesson, index) => {
         const isCompleted = completed.has(lesson.id);
         const state: LearningJourneyNode["state"] = isCompleted ? "completed" : locked ? "locked" : "available";
