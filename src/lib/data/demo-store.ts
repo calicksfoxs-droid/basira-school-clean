@@ -208,7 +208,7 @@ export class DemoStore implements BasiraStore {
     return mutateDemoDatabase((db) => {
       const ownerTeacherId = identity.role === "teacher" ? identity.userId : input.ownerTeacherId;
       assertAllowed(Boolean(ownerTeacherId), "اختر المعلم المسؤول");
-      const owner = assertFound(db.users.find((u) => u.id === ownerTeacherId && u.role === "teacher"));
+      const owner = assertFound(db.users.find((u) => u.id === ownerTeacherId && u.role === "teacher" && u.status === "active"));
       const group: Group = { id: randomUUID(), name: input.name, description: input.description, ownerTeacherId: owner.id, status: "active", createdBy: identity.userId, createdAt: now() };
       db.groups.push(group);
       return group;
@@ -219,7 +219,7 @@ export class DemoStore implements BasiraStore {
     assertAllowed(identity.role === "admin");
     await mutateDemoDatabase((db) => {
       const group = assertFound(db.groups.find((g) => g.id === groupId));
-      assertFound(db.users.find((u) => u.id === ownerTeacherId && u.role === "teacher"));
+      assertFound(db.users.find((u) => u.id === ownerTeacherId && u.role === "teacher" && u.status === "active"));
       group.ownerTeacherId = ownerTeacherId;
     });
   }
@@ -228,7 +228,7 @@ export class DemoStore implements BasiraStore {
     await mutateDemoDatabase((db) => {
       const group = assertFound(db.groups.find((g) => g.id === groupId));
       assertAllowed(groupOwnedBy(identity, group));
-      assertFound(db.users.find((u) => u.id === studentId && u.role === "student"));
+      assertFound(db.users.find((u) => u.id === studentId && u.role === "student" && u.status === "active"));
       const existing = db.memberships.find((m) => m.groupId === groupId && m.studentId === studentId);
       if (existing) existing.status = "active";
       else db.memberships.push({ id: randomUUID(), groupId, studentId, status: "active", joinedAt: now() });
