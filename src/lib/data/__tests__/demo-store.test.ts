@@ -156,7 +156,10 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
   it("requires active teacher and active student targets for group ownership and membership", async () => {
     const store = new DemoStore();
 
-    const disabledTeacherResult = await store.createTeacher(admin, { displayName: "أ. متوقف" });
+    const disabledTeacherResult = await store.createTeacher(admin, {
+      creationRequestId: "70000000-0000-4000-8000-000000000001",
+      displayName: "أ. متوقف",
+    });
     const disabledTeacher: Identity = {
       userId: disabledTeacherResult.user.id,
       displayName: disabledTeacherResult.user.displayName,
@@ -168,7 +171,11 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     await expect(store.transferGroup(admin, seededGroupId, disabledTeacher.userId))
       .rejects.toMatchObject({ code: "NOT_FOUND" });
 
-    const disabledStudentResult = await store.createStudent(admin, { displayName: "طالب متوقف" });
+    const disabledStudentResult = await store.createStudent(admin, {
+      creationRequestId: "70000000-0000-4000-8000-000000000002",
+      displayName: "طالب متوقف",
+      groupId: seededGroupId,
+    });
     await store.disableUser(admin, disabledStudentResult.user.id);
 
     await expect(store.addStudentToGroup(teacher, seededGroupId, disabledStudentResult.user.id))
