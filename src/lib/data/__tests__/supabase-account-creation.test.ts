@@ -271,7 +271,8 @@ describe("Supabase account creation provisioning", () => {
       "prepare_account_creation_v1",
       "set_account_creation_cleanup_v1",
     ]);
-    expect(fake.rpcCalls[1].args).toMatchObject({ p_state: "cleaned" });
+    expect(fake.rpcCalls.find((call) => call.name === "set_account_creation_cleanup_v1")?.args)
+      .toMatchObject({ p_state: "cleaned" });
   });
 
   it("keeps a transport-ambiguous Auth create prepared when immediate lookup is still absent", async () => {
