@@ -80,6 +80,42 @@ begin
     raise exception 'Invalid public account reference';
   end if;
 
+  select o.*
+  into v_op
+  from private.account_creation_operations o
+  where o.request_id=p_request_id
+  for update;
+
+  if found then
+    if v_op.actor_id is distinct from p_actor_id
+       or v_op.target_role is distinct from p_target_role
+       or v_op.group_id is distinct from p_group_id
+       or v_op.display_name is distinct from trim(p_display_name)
+       or v_op.contact_number is distinct from nullif(trim(p_contact_number),'')
+    then
+      raise exception 'Creation request does not match prior attempt';
+    end if;
+
+    -- A committed request and a cleanup-pending request must remain discoverable
+    -- even if Group status/ownership changes after the original attempt.
+    if v_op.state in ('complete','cleanup_pending') then
+      return query
+      select
+        v_op.request_id,
+        v_op.actor_id,
+        v_op.auth_user_id,
+        v_op.target_role,
+        v_op.group_id,
+        v_op.display_name,
+        v_op.public_account_ref,
+        'basira.' || replace(v_op.auth_user_id::text,'-','') || '@access.invalid',
+        v_op.contact_number,
+        v_op.state;
+      return;
+    end if;
+  end if;
+
+  -- New, prepared, and cleaned attempts must still satisfy current authority.
   select p.role,p.status
   into v_actor_role,v_actor_status
   from public.profiles p
@@ -114,22 +150,7 @@ begin
     end if;
   end if;
 
-  select o.*
-  into v_op
-  from private.account_creation_operations o
-  where o.request_id=p_request_id
-  for update;
-
   if found then
-    if v_op.actor_id is distinct from p_actor_id
-       or v_op.target_role is distinct from p_target_role
-       or v_op.group_id is distinct from p_group_id
-       or v_op.display_name is distinct from trim(p_display_name)
-       or v_op.contact_number is distinct from nullif(trim(p_contact_number),'')
-    then
-      raise exception 'Creation request does not match prior attempt';
-    end if;
-
     if v_op.state='cleaned' then
       if exists(
         select 1
@@ -149,6 +170,8 @@ begin
           updated_at=now()
       where o.request_id=p_request_id
       returning o.* into v_op;
+    elsif v_op.state<>'prepared' then
+      raise exception 'Account creation operation has invalid state';
     end if;
   else
     if exists(
