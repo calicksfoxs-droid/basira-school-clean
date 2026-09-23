@@ -59,6 +59,48 @@ function submissionFrom(row: Record<string, unknown>): Submission {
   return { id: String(row.id), quizId: String(row.quiz_id), studentId: String(row.student_id), status: String(row.status) as Submission["status"], objectiveScore: Number(row.objective_score), manualScore: Number(row.manual_score), totalScore: Number(row.total_score), submittedAt: String(row.submitted_at), gradedAt: row.graded_at ? String(row.graded_at) : undefined, releasedAt: row.released_at ? String(row.released_at) : undefined, resetCount: Number(row.reset_count ?? 0) };
 }
 
+type AccountCreationState = "prepared" | "complete" | "cleanup_pending" | "cleaned";
+
+type AccountCreationOperation = {
+  requestId: string;
+  actorId: string;
+  authUserId: string;
+  targetRole: "teacher" | "student";
+  groupId?: string;
+  displayName: string;
+  publicRef: string;
+  syntheticEmail: string;
+  contactNumber?: string;
+  state: AccountCreationState;
+  cleanupError?: string;
+};
+
+function creationOperationFrom(row: Record<string, unknown>): AccountCreationOperation {
+  return {
+    requestId: String(row.request_id),
+    actorId: String(row.actor_id),
+    authUserId: String(row.auth_user_id),
+    targetRole: String(row.target_role) as "teacher" | "student",
+    groupId: row.group_id ? String(row.group_id) : undefined,
+    displayName: String(row.display_name),
+    publicRef: String(row.public_account_ref),
+    syntheticEmail: String(row.synthetic_email),
+    contactNumber: row.contact_number ? String(row.contact_number) : undefined,
+    state: String(row.state) as AccountCreationState,
+    cleanupError: row.cleanup_error ? String(row.cleanup_error) : undefined,
+  };
+}
+
+function isUniqueViolation(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "23505");
+}
+
+function isAuthUserNotFound(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { status?: unknown; code?: unknown };
+  return candidate.status === 404 || candidate.code === "user_not_found";
+}
+
 export class SupabaseStore implements BasiraStore {
   private async client() { return createServerSupabaseClient(); }
   private admin() { return createAdminSupabaseClient(); }
@@ -167,43 +209,368 @@ export class SupabaseStore implements BasiraStore {
 
   async createTeacher(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode> {
     assertAllowed(identity.role === "admin");
-    return this.createAccount(identity, "teacher", input);
+    return this.createProvisionedAccount(identity, "teacher", input);
   }
 
   async createStudent(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode> {
     assertAllowed(identity.role === "admin" || identity.role === "teacher");
-    if (identity.role === "teacher") {
-      assertAllowed(Boolean(input.groupId), "اختر مجموعة");
-      await this.getGroup(identity, assertFound(input.groupId));
-    }
-    const created = await this.createAccount(identity, "student", input);
-    if (input.groupId) {
-      await this.addStudentToGroup(identity, input.groupId, created.user.id);
-      if (identity.role === "teacher") await this.upsertPrivateRecord(identity, { studentId: created.user.id, groupId: input.groupId, contactNumber: input.contactNumber });
-    }
-    return created;
+    assertAllowed(Boolean(input.groupId), "اختر مجموعة");
+    return this.createProvisionedAccount(identity, "student", input);
   }
 
-  private async createAccount(identity: Identity, role: Role, input: CreateUserInput): Promise<CreatedAccessCode> {
-    const generated = generateAccessCode();
-    const syntheticEmail = `basira.${generated.publicRef.toLowerCase()}@access.invalid`;
+  private async preflightAccountCreation(
+    identity: Identity,
+    role: "teacher" | "student",
+    input: CreateUserInput,
+  ) {
+    assertAllowed(identity.status === "active");
+
+    if (role === "teacher") {
+      assertAllowed(identity.role === "admin");
+      assertAllowed(!input.groupId);
+      return;
+    }
+
+    assertAllowed(identity.role === "admin" || identity.role === "teacher");
+    const groupId = assertFound(input.groupId, "اختر مجموعة");
     const admin = this.admin();
-    const { data: authData, error: authError } = await admin.auth.admin.createUser({ email: syntheticEmail, password: generated.secret, email_confirm: true, user_metadata: { display_name: input.displayName, role } });
-    if (authError || !authData.user) throw authError ?? new Error("تعذر إنشاء مستخدم Auth");
-    const userId = authData.user.id;
-    const profile = { id: userId, display_name: input.displayName, role, status: "active", created_by: identity.userId, session_invalid_before: iso() };
-    const { error: profileError } = await admin.from("profiles").insert(profile);
-    if (profileError) {
-      await admin.auth.admin.deleteUser(userId);
-      throw profileError;
+    const { data, error } = await admin
+      .from("groups")
+      .select("id,owner_teacher_id,status")
+      .eq("id", groupId)
+      .maybeSingle();
+    if (error) throw error;
+
+    const group = assertFound(data as Record<string, unknown> | null);
+    assertAllowed(group.status === "active", "المجموعة غير نشطة");
+    if (identity.role === "teacher") {
+      assertAllowed(String(group.owner_teacher_id) === identity.userId);
     }
-    const { error: credentialError } = await admin.from("access_credentials").insert({ auth_user_id: userId, public_account_ref: generated.publicRef, synthetic_email: syntheticEmail, role, state: "unused", code_hint: `BSR-${generated.publicRef}-••••••••`, issued_by: identity.userId });
-    if (credentialError) {
-      await admin.from("profiles").delete().eq("id", userId);
-      await admin.auth.admin.deleteUser(userId);
-      throw credentialError;
+  }
+
+  private async prepareAccountCreation(
+    identity: Identity,
+    role: "teacher" | "student",
+    input: CreateUserInput,
+  ): Promise<AccountCreationOperation> {
+    const admin = this.admin();
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const publicRef = generateAccessCode().publicRef;
+      const { data, error } = await admin
+        .rpc("prepare_account_creation_v1", {
+          p_request_id: input.creationRequestId,
+          p_actor_id: identity.userId,
+          p_target_role: role,
+          p_group_id: role === "student" ? input.groupId ?? null : null,
+          p_display_name: input.displayName,
+          p_public_account_ref: publicRef,
+          p_contact_number: role === "student" ? input.contactNumber ?? null : null,
+        })
+        .single();
+
+      if (!error && data) return creationOperationFrom(data as Record<string, unknown>);
+      if (!isUniqueViolation(error)) throw error ?? new Error("تعذر تجهيز إنشاء الحساب");
     }
-    return { user: { id: userId, displayName: input.displayName, role, status: "active", syntheticEmail, createdBy: identity.userId, createdAt: iso() }, code: generated.code };
+
+    throw new AppError("تعذر حجز رمز دخول فريد. حاول مرة أخرى.", "ACCESS_CODE_COLLISION", 409);
+  }
+
+  private async getAccountCreationOperation(
+    identity: Identity,
+    requestId: string,
+  ): Promise<AccountCreationOperation> {
+    const admin = this.admin();
+    const { data, error } = await admin
+      .rpc("get_account_creation_operation_v1", {
+        p_request_id: requestId,
+        p_actor_id: identity.userId,
+      })
+      .single();
+    if (error || !data) throw error ?? new Error("تعذر قراءة حالة إنشاء الحساب");
+    return creationOperationFrom(data as Record<string, unknown>);
+  }
+
+  private async setAccountCreationCleanupState(
+    identity: Identity,
+    requestId: string,
+    state: "cleaned" | "cleanup_pending",
+    errorMessage?: string,
+  ) {
+    const admin = this.admin();
+    const { error } = await admin
+      .rpc("set_account_creation_cleanup_v1", {
+        p_request_id: requestId,
+        p_actor_id: identity.userId,
+        p_state: state,
+        p_error: errorMessage ?? null,
+      })
+      .single();
+    if (error) console.error("Account creation cleanup state update failed", error.message);
+  }
+
+  private async inspectAuthCreationUser(operation: AccountCreationOperation) {
+    const admin = this.admin();
+    try {
+      const { data, error } = await admin.auth.admin.getUserById(operation.authUserId);
+      if (error) {
+        if (isAuthUserNotFound(error)) return { status: "absent" as const };
+        return { status: "ambiguous" as const, error };
+      }
+      if (!data.user) return { status: "ambiguous" as const, error: new Error("Auth lookup returned no user") };
+
+      const requestMarker = data.user.app_metadata?.basira_creation_request_id;
+      if (
+        data.user.id !== operation.authUserId ||
+        data.user.email !== operation.syntheticEmail ||
+        requestMarker !== operation.requestId
+      ) {
+        return { status: "ambiguous" as const, error: new Error("Auth user does not match creation operation") };
+      }
+      return { status: "present" as const, user: data.user };
+    } catch (error) {
+      return { status: "ambiguous" as const, error };
+    }
+  }
+
+  private async compensateCreatedAuthUser(
+    identity: Identity,
+    operation: AccountCreationOperation,
+    reason: string,
+  ): Promise<"clean" | "pending"> {
+    const admin = this.admin();
+    let deleteError: unknown = null;
+
+    try {
+      const result = await admin.auth.admin.deleteUser(operation.authUserId);
+      deleteError = result.error;
+    } catch (error) {
+      deleteError = error;
+    }
+
+    if (!deleteError) {
+      await this.setAccountCreationCleanupState(identity, operation.requestId, "cleaned");
+      return "clean";
+    }
+
+    const observed = await this.inspectAuthCreationUser(operation);
+    if (observed.status === "absent") {
+      await this.setAccountCreationCleanupState(identity, operation.requestId, "cleaned");
+      return "clean";
+    }
+
+    const detail = observed.status === "ambiguous"
+      ? `${reason}; delete=${String(deleteError)}; reconcile=${String(observed.error)}`
+      : `${reason}; delete=${String(deleteError)}; auth-user-still-present`;
+    await this.setAccountCreationCleanupState(identity, operation.requestId, "cleanup_pending", detail);
+    return "pending";
+  }
+
+  private async recoverCleanupPending(
+    identity: Identity,
+    operation: AccountCreationOperation,
+  ) {
+    const result = await this.compensateCreatedAuthUser(identity, operation, "retry cleanup");
+    if (result === "pending") {
+      throw new AppError(
+        "تعذر تأكيد تنظيف محاولة سابقة. لم يتم إصدار رمز دخول جديد.",
+        "ACCOUNT_CREATION_RECOVERY_PENDING",
+        503,
+      );
+    }
+  }
+
+  private async provisionPreparedAccount(
+    identity: Identity,
+    operation: AccountCreationOperation,
+  ): Promise<AccountCreationOperation> {
+    const admin = this.admin();
+
+    try {
+      const { data, error } = await admin
+        .rpc("provision_account_v1", {
+          p_request_id: operation.requestId,
+          p_actor_id: identity.userId,
+        })
+        .single();
+
+      if (!error && data) return creationOperationFrom(data as Record<string, unknown>);
+
+      let observed: AccountCreationOperation;
+      try {
+        observed = await this.getAccountCreationOperation(identity, operation.requestId);
+      } catch (reconcileError) {
+        throw new AppError(
+          "تعذر تأكيد نتيجة إنشاء الحساب. لم يتم حذف أي بيانات تلقائيًا.",
+          "ACCOUNT_CREATION_RECONCILIATION_PENDING",
+          503,
+          { cause: reconcileError },
+        );
+      }
+
+      if (observed.state === "complete") return observed;
+      if (observed.state !== "prepared") {
+        throw new AppError(
+          "حالة إنشاء الحساب تحتاج مراجعة قبل إعادة المحاولة.",
+          "ACCOUNT_CREATION_RECOVERY_PENDING",
+          503,
+        );
+      }
+
+      const cleanup = await this.compensateCreatedAuthUser(
+        identity,
+        observed,
+        error?.message ?? "database provisioning failed",
+      );
+      if (cleanup === "pending") {
+        throw new AppError(
+          "فشل إنشاء الحساب وتعذر تأكيد تنظيف مستخدم Auth. لم يتم كشف رمز الدخول.",
+          "ACCOUNT_CREATION_RECOVERY_PENDING",
+          503,
+        );
+      }
+
+      throw error ?? new Error("تعذر إكمال إنشاء الحساب");
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+
+      let observed: AccountCreationOperation;
+      try {
+        observed = await this.getAccountCreationOperation(identity, operation.requestId);
+      } catch (reconcileError) {
+        throw new AppError(
+          "تعذر تأكيد نتيجة إنشاء الحساب. لم يتم حذف أي بيانات تلقائيًا.",
+          "ACCOUNT_CREATION_RECONCILIATION_PENDING",
+          503,
+          { cause: reconcileError },
+        );
+      }
+
+      if (observed.state === "complete") return observed;
+      if (observed.state !== "prepared") {
+        throw new AppError(
+          "حالة إنشاء الحساب تحتاج مراجعة قبل إعادة المحاولة.",
+          "ACCOUNT_CREATION_RECOVERY_PENDING",
+          503,
+          { cause: error },
+        );
+      }
+
+      const cleanup = await this.compensateCreatedAuthUser(identity, observed, "ambiguous database provisioning");
+      if (cleanup === "pending") {
+        throw new AppError(
+          "تعذر تأكيد تنظيف مستخدم Auth بعد فشل إنشاء الحساب.",
+          "ACCOUNT_CREATION_RECOVERY_PENDING",
+          503,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async createProvisionedAccount(
+    identity: Identity,
+    role: "teacher" | "student",
+    input: CreateUserInput,
+  ): Promise<CreatedAccessCode> {
+    await this.preflightAccountCreation(identity, role, input);
+
+    let operation = await this.prepareAccountCreation(identity, role, input);
+
+    if (operation.state === "complete") {
+      return this.resetAccessCode(identity, operation.authUserId);
+    }
+
+    if (operation.state === "cleanup_pending") {
+      await this.recoverCleanupPending(identity, operation);
+      operation = await this.prepareAccountCreation(identity, role, input);
+    }
+
+    if (operation.state !== "prepared") {
+      throw new AppError(
+        "تعذر بدء إنشاء الحساب من الحالة الحالية.",
+        "ACCOUNT_CREATION_RECOVERY_PENDING",
+        503,
+      );
+    }
+
+    const admin = this.admin();
+    const beforeCreate = await this.inspectAuthCreationUser(operation);
+    if (beforeCreate.status === "ambiguous") {
+      throw new AppError(
+        "تعذر تأكيد حالة مستخدم Auth لمحاولة الإنشاء الحالية.",
+        "ACCOUNT_CREATION_RECONCILIATION_PENDING",
+        503,
+        { cause: beforeCreate.error },
+      );
+    }
+
+    let directAuthSuccess = false;
+    let secret = generateAccessCode().secret;
+
+    if (beforeCreate.status === "absent") {
+      let createResult: Awaited<ReturnType<typeof admin.auth.admin.createUser>> | undefined;
+      let createThrown: unknown;
+
+      try {
+        createResult = await admin.auth.admin.createUser({
+          id: operation.authUserId,
+          email: operation.syntheticEmail,
+          password: secret,
+          email_confirm: true,
+          user_metadata: { display_name: operation.displayName },
+          app_metadata: {
+            basira_creation_request_id: operation.requestId,
+            basira_target_role: operation.targetRole,
+          },
+        });
+      } catch (error) {
+        createThrown = error;
+      }
+
+      if (createResult && !createResult.error && createResult.data.user) {
+        directAuthSuccess = createResult.data.user.id === operation.authUserId;
+        if (!directAuthSuccess) {
+          throw new AppError("Auth أعاد مستخدمًا غير متوقع.", "ACCOUNT_CREATION_RECONCILIATION_PENDING", 503);
+        }
+      } else {
+        const afterCreate = await this.inspectAuthCreationUser(operation);
+        if (afterCreate.status === "absent") {
+          await this.setAccountCreationCleanupState(identity, operation.requestId, "cleaned");
+          throw createResult?.error ?? createThrown ?? new Error("تعذر إنشاء مستخدم Auth");
+        }
+        if (afterCreate.status === "ambiguous") {
+          throw new AppError(
+            "نتيجة إنشاء مستخدم Auth غير مؤكدة. أعد المحاولة بنفس الطلب.",
+            "ACCOUNT_CREATION_RECONCILIATION_PENDING",
+            503,
+            { cause: afterCreate.error ?? createResult?.error ?? createThrown },
+          );
+        }
+        directAuthSuccess = false;
+      }
+    }
+
+    const provisioned = await this.provisionPreparedAccount(identity, operation);
+
+    if (!directAuthSuccess) {
+      return this.resetAccessCode(identity, provisioned.authUserId);
+    }
+
+    const code = `BSR-${provisioned.publicRef}-${secret}`;
+    return {
+      user: {
+        id: provisioned.authUserId,
+        displayName: provisioned.displayName,
+        role: provisioned.targetRole,
+        status: "active",
+        syntheticEmail: provisioned.syntheticEmail,
+        createdBy: identity.userId,
+        createdAt: iso(),
+      },
+      code,
+    };
   }
 
   async resetAccessCode(identity: Identity, userId: string): Promise<CreatedAccessCode> {
