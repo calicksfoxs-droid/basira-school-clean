@@ -521,7 +521,6 @@ export class SupabaseStore implements BasiraStore {
             "نتيجة إنشاء مستخدم Auth غير مؤكدة. أعد المحاولة بنفس الطلب.",
             "ACCOUNT_CREATION_RECONCILIATION_PENDING",
             503,
-            { cause: afterCreate.error ?? createResult?.error ?? createThrown },
           );
         }
         directAuthSuccess = false;
