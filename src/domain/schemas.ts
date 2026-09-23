@@ -17,6 +17,7 @@ export const createGroupSchema = z.object({
 });
 
 export const createUserSchema = z.object({
+  creationRequestId: z.string().uuid(),
   displayName: nameSchema,
   groupId: z.string().uuid().optional(),
   contactNumber: z.string().trim().max(40).optional(),
