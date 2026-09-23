@@ -178,8 +178,34 @@ describe("Supabase account creation provisioning", () => {
 
   it("rejects Teacher Student creation in a foreign Group before Auth creation", async () => {
     const fake = createFakeAdmin({
+      rpc: {
+        prepare_account_creation_v1: [{
+          data: null,
+          error: { message: "Teacher does not own target Group" },
+        }],
+      },
+    });
+    const store = new SupabaseStore();
+    installAdmin(store, fake.admin);
+
+    await expect(store.createStudent(teacherIdentity, {
+      creationRequestId: requestId,
+      displayName: "Student New",
+      groupId,
+    })).rejects.toMatchObject({ message: "Teacher does not own target Group" });
+
+    expect(fake.createUser).not.toHaveBeenCalled();
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual(["prepare_account_creation_v1"]);
+  });
+
+  it("rejects an inactive Group during application preflight before Auth creation", async () => {
+    const prepared = studentOp();
+    const fake = createFakeAdmin({
+      rpc: {
+        prepare_account_creation_v1: [{ data: prepared, error: null }],
+      },
       groups: [{
-        data: { id: groupId, owner_teacher_id: "other-teacher", status: "active" },
+        data: { id: groupId, owner_teacher_id: teacherIdentity.userId, status: "archived" },
         error: null,
       }],
     });
@@ -193,7 +219,6 @@ describe("Supabase account creation provisioning", () => {
     })).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     expect(fake.createUser).not.toHaveBeenCalled();
-    expect(fake.rpcCalls).toHaveLength(0);
   });
 
   it("marks a definite Auth-create failure clean when reconciliation proves absence", async () => {
