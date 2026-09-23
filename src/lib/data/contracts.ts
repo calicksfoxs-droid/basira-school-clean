@@ -24,6 +24,7 @@ export interface CreatedAccessCode {
 }
 
 export interface CreateUserInput {
+  creationRequestId: string;
   displayName: string;
   groupId?: string;
   contactNumber?: string;
