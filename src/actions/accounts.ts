@@ -13,7 +13,10 @@ export async function createTeacherAction(formData: FormData) {
   const path = returnPath(formData, "/app/admin/teachers");
   try {
     const identity = await requireRole("admin");
-    const parsed = createUserSchema.parse({ displayName: formText(formData, "displayName") });
+    const parsed = createUserSchema.parse({
+      creationRequestId: formText(formData, "creationRequestId"),
+      displayName: formText(formData, "displayName"),
+    });
     const created = await (await getStore()).createTeacher(identity, parsed);
     await setAccessCodeFlash(created.code, created.user.displayName);
     revalidatePath("/app/admin");
@@ -42,7 +45,10 @@ export async function createTeacherWithRevealAction(
 
   try {
     const identity = await requireRole("admin");
-    const parsed = createUserSchema.parse({ displayName: formText(formData, "displayName") });
+    const parsed = createUserSchema.parse({
+      creationRequestId: formText(formData, "creationRequestId"),
+      displayName: formText(formData, "displayName"),
+    });
     const created = await (await getStore()).createTeacher(identity, parsed);
     revalidatePath(path);
 
@@ -67,6 +73,7 @@ export async function createStudentAction(formData: FormData) {
   try {
     const identity = await requireRole("admin", "teacher");
     const parsed = createUserSchema.parse({
+      creationRequestId: formText(formData, "creationRequestId"),
       displayName: formText(formData, "displayName"),
       groupId: formText(formData, "groupId") || undefined,
       contactNumber: formText(formData, "contactNumber") || undefined,
@@ -106,6 +113,7 @@ export async function createStudentWithRevealAction(
   try {
     const identity = await requireRole("admin", "teacher");
     const parsed = createUserSchema.parse({
+      creationRequestId: formText(formData, "creationRequestId"),
       displayName: formText(formData, "displayName"),
       groupId: formText(formData, "groupId") || undefined,
       contactNumber: formText(formData, "contactNumber") || undefined,
