@@ -1,0 +1,36 @@
+name: Phase 1.7 Live Production Smoke
+
+on:
+  push:
+    branches:
+      - verify/phase17-live-production
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASIRA_BACKEND: supabase
+      BASIRA_APP_SECRET: phase17-live-smoke-secret-32chars-minimum
+      NEXT_PUBLIC_SUPABASE_URL: https://fhedbrmdrgzvbtjvlgfu.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: phase17-live-smoke-placeholder
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: npm
+      - name: Require service role secret
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "MISSING_SUPABASE_SERVICE_ROLE_KEY"
+            exit 2
+          fi
+      - run: npm ci
+      - run: npx vitest run src/lib/data/__tests__/phase17-live-production.test.ts
