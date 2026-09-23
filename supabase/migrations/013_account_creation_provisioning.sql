@@ -61,6 +61,7 @@ declare
   v_actor_status text;
   v_group_owner uuid;
   v_group_status text;
+  v_existing boolean := false;
   v_op private.account_creation_operations%rowtype;
 begin
   if p_target_role not in ('teacher','student') then
@@ -86,7 +87,9 @@ begin
   where o.request_id=p_request_id
   for update;
 
-  if found then
+  v_existing := found;
+
+  if v_existing then
     if v_op.actor_id is distinct from p_actor_id
        or v_op.target_role is distinct from p_target_role
        or v_op.group_id is distinct from p_group_id
@@ -150,7 +153,7 @@ begin
     end if;
   end if;
 
-  if found then
+  if v_existing then
     if v_op.state='cleaned' then
       if exists(
         select 1
