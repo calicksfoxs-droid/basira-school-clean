@@ -282,19 +282,49 @@ export class SupabaseStore implements BasiraStore {
     throw new AppError("تعذر حجز رمز دخول فريد. حاول مرة أخرى.", "ACCESS_CODE_COLLISION", 409);
   }
 
-  private async getAccountCreationOperation(
+  private async findAccountCreationOperation(
     identity: Identity,
     requestId: string,
-  ): Promise<AccountCreationOperation> {
+  ): Promise<AccountCreationOperation | null> {
     const admin = this.admin();
     const { data, error } = await admin
       .rpc("get_account_creation_operation_v1", {
         p_request_id: requestId,
         p_actor_id: identity.userId,
       })
-      .single();
-    if (error || !data) throw error ?? new Error("تعذر قراءة حالة إنشاء الحساب");
-    return creationOperationFrom(data as Record<string, unknown>);
+      .maybeSingle();
+    if (error) throw error;
+    return data ? creationOperationFrom(data as Record<string, unknown>) : null;
+  }
+
+  private async getAccountCreationOperation(
+    identity: Identity,
+    requestId: string,
+  ): Promise<AccountCreationOperation> {
+    const operation = await this.findAccountCreationOperation(identity, requestId);
+    if (!operation) throw new Error("تعذر قراءة حالة إنشاء الحساب");
+    return operation;
+  }
+
+  private assertAccountCreationIntent(
+    operation: AccountCreationOperation,
+    role: "teacher" | "student",
+    input: CreateUserInput,
+  ) {
+    const contactNumber = input.contactNumber?.trim() || undefined;
+    const expectedGroupId = role === "student" ? input.groupId : undefined;
+    if (
+      operation.targetRole !== role ||
+      operation.groupId !== expectedGroupId ||
+      operation.displayName !== input.displayName.trim() ||
+      operation.contactNumber !== contactNumber
+    ) {
+      throw new AppError(
+        "طلب إنشاء الحساب لا يطابق المحاولة السابقة.",
+        "ACCOUNT_CREATION_REQUEST_MISMATCH",
+        409,
+      );
+    }
   }
 
   private async setAccountCreationCleanupState(
@@ -457,7 +487,13 @@ export class SupabaseStore implements BasiraStore {
     role: "teacher" | "student",
     input: CreateUserInput,
   ): Promise<CreatedAccessCode> {
-    let operation = await this.prepareAccountCreation(identity, role, input);
+    let operation = await this.findAccountCreationOperation(identity, input.creationRequestId);
+
+    if (!operation) {
+      operation = await this.prepareAccountCreation(identity, role, input);
+    } else {
+      this.assertAccountCreationIntent(operation, role, input);
+    }
 
     if (operation.state === "complete") {
       return this.resetAccessCode(identity, operation.authUserId);
@@ -467,8 +503,6 @@ export class SupabaseStore implements BasiraStore {
       await this.recoverCleanupPending(identity, operation);
       await this.preflightAccountCreation(identity, role, input);
       operation = await this.prepareAccountCreation(identity, role, input);
-    } else {
-      await this.preflightAccountCreation(identity, role, input);
     }
 
     if (operation.state !== "prepared") {
@@ -492,7 +526,27 @@ export class SupabaseStore implements BasiraStore {
     let directAuthSuccess = false;
     const secret = generateAccessCode().secret;
 
-    if (beforeCreate.status === "absent") {
+    if (beforeCreate.status === "present") {
+      try {
+        await this.preflightAccountCreation(identity, role, input);
+      } catch (authorityError) {
+        const cleanup = await this.compensateCreatedAuthUser(
+          identity,
+          operation,
+          "prepared retry is no longer authorized",
+        );
+        if (cleanup === "pending") {
+          throw new AppError(
+            "تعذر تأكيد تنظيف مستخدم Auth لمحاولة لم تعد مسموحة.",
+            "ACCOUNT_CREATION_RECOVERY_PENDING",
+            503,
+          );
+        }
+        throw authorityError;
+      }
+    } else {
+      await this.preflightAccountCreation(identity, role, input);
+
       let createResult: Awaited<ReturnType<typeof admin.auth.admin.createUser>> | undefined;
       let createThrown: unknown;
 
@@ -515,7 +569,11 @@ export class SupabaseStore implements BasiraStore {
       if (createResult && !createResult.error && createResult.data.user) {
         directAuthSuccess = createResult.data.user.id === operation.authUserId;
         if (!directAuthSuccess) {
-          throw new AppError("Auth أعاد مستخدمًا غير متوقع.", "ACCOUNT_CREATION_RECONCILIATION_PENDING", 503);
+          throw new AppError(
+            "Auth أعاد مستخدمًا غير متوقع.",
+            "ACCOUNT_CREATION_RECONCILIATION_PENDING",
+            503,
+          );
         }
       } else {
         const afterCreate = await this.inspectAuthCreationUser(operation);
