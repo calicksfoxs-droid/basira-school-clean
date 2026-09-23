@@ -14,6 +14,8 @@
 -- - root subject ownership cannot be partially changed while linked groups exist
 -- - membership targets remain student-role assignments; inserting/reactivating
 --   an active membership requires an active student
+-- - profile role is immutable after INSERT, so owner/member role integrity cannot
+--   be invalidated underneath existing relationships through direct Data API
 -- - disabling an existing teacher/student does not rewrite historical relations;
 --   effective authorization is revoked by session_is_current()/current_app_role()
 
@@ -358,6 +360,29 @@ on public.group_memberships
 for each row
 execute function public.enforce_group_membership_student_v1();
 
+create or replace function public.enforce_profile_role_immutable_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path=''
+as $
+begin
+  if new.role is distinct from old.role then
+    raise exception 'Profile role cannot be changed directly';
+  end if;
+
+  return new;
+end;
+$;
+
+drop trigger if exists enforce_profile_role_immutable_v1 on public.profiles;
+
+create trigger enforce_profile_role_immutable_v1
+before update of role
+on public.profiles
+for each row
+execute function public.enforce_profile_role_immutable_v1();
+
 -- Trigger functions are internal-only and must not become client RPCs.
 revoke all on function public.enforce_subject_group_owner_v1()
   from public,anon,authenticated;
@@ -366,4 +391,6 @@ revoke all on function public.enforce_learning_subject_owner_v1()
 revoke all on function public.sync_legacy_group_subject_ownership_v1()
   from public,anon,authenticated;
 revoke all on function public.enforce_group_membership_student_v1()
+  from public,anon,authenticated;
+revoke all on function public.enforce_profile_role_immutable_v1()
   from public,anon,authenticated;
