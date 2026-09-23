@@ -200,7 +200,10 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
 
   it("removes the old teacher's access immediately after ownership transfer", async () => {
     const store = new DemoStore();
-    const created = await store.createTeacher(admin, { displayName: "أ. منى" });
+    const created = await store.createTeacher(admin, {
+      creationRequestId: "70000000-0000-4000-8000-000000000003",
+      displayName: "أ. منى",
+    });
     const newTeacher: Identity = { userId: created.user.id, displayName: created.user.displayName, role: "teacher", status: "active" };
 
     await store.transferGroup(admin, seededGroupId, newTeacher.userId);
