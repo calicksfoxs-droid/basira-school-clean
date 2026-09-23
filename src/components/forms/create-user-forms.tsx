@@ -17,14 +17,20 @@ export function CreateTeacherForm({ returnTo }: { returnTo: string }) {
   const [state, action, pending] = useActionState(createTeacherWithRevealAction, initialState);
   const [dismissedCode, setDismissedCode] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const [creationRequestId, setCreationRequestId] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const revealed = state.ok && state.data ? state.data : undefined;
   const shouldReveal = Boolean(revealed && revealed.code !== dismissedCode);
 
   useEffect(() => {
+    setCreationRequestId((current) => current || globalThis.crypto.randomUUID());
+  }, []);
+
+  useEffect(() => {
     if (!shouldReveal || !dialogRef.current || dialogRef.current.open) return;
     formRef.current?.reset();
+    setCreationRequestId(globalThis.crypto.randomUUID());
     dialogRef.current.showModal();
   }, [shouldReveal]);
 
@@ -43,9 +49,10 @@ export function CreateTeacherForm({ returnTo }: { returnTo: string }) {
   return <>
     <form ref={formRef} action={action} className="grid gap-5">
       <input type="hidden" name="returnTo" value={returnTo}/>
+      <input type="hidden" name="creationRequestId" value={creationRequestId}/>
       <Field label="اسم المعلّم"><Input name="displayName" required placeholder="مثال: أ. أحمد علي"/></Field>
       {!state.ok && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{state.error}</p>}
-      <Button disabled={pending}>{pending ? "جارٍ إنشاء المعلّم…" : "إنشاء الحساب وإصدار الرمز"}</Button>
+      <Button disabled={pending || !creationRequestId}>{pending ? "جارٍ إنشاء المعلّم…" : "إنشاء الحساب وإصدار الرمز"}</Button>
     </form>
 
     {shouldReveal && <dialog ref={dialogRef} onCancel={(event) => { event.preventDefault(); closeReveal(); }} className="m-auto w-[min(92vw,560px)] rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text)] shadow-2xl backdrop:bg-[#170b35]/70 backdrop:backdrop-blur-sm">
@@ -72,6 +79,7 @@ export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }:
   const [state, action, pending] = useActionState(createStudentWithRevealAction, initialCreateStudentRevealState);
   const [dismissedCode, setDismissedCode] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const [creationRequestId, setCreationRequestId] = useState("");
   const [amount, setAmount] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const pendingFinance = useRef<{ groupId: string; amount: string; note: string } | undefined>(undefined);
@@ -79,6 +87,10 @@ export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }:
   const dialogRef = useRef<HTMLDialogElement>(null);
   const revealed = state.ok && state.data ? state.data : undefined;
   const shouldReveal = Boolean(revealed && revealed.code !== dismissedCode);
+
+  useEffect(() => {
+    setCreationRequestId((current) => current || globalThis.crypto.randomUUID());
+  }, []);
 
   useEffect(() => {
     if (!shouldReveal || !dialogRef.current || dialogRef.current.open) return;
@@ -92,6 +104,7 @@ export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }:
       setPaymentNote("");
     }
     formRef.current?.reset();
+    setCreationRequestId(globalThis.crypto.randomUUID());
     dialogRef.current.showModal();
   }, [revealed?.studentId, shouldReveal, teacherId]);
 
@@ -117,6 +130,7 @@ export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }:
   return <>
     <form ref={formRef} action={action} onSubmit={rememberLocalFinance} className="grid gap-5">
       <input type="hidden" name="returnTo" value={returnTo}/>
+      <input type="hidden" name="creationRequestId" value={creationRequestId}/>
       <Field label="اسم الطالب"><Input name="displayName" required/></Field>
       {fixedGroupId ? <input type="hidden" name="groupId" value={fixedGroupId}/> : <Field label="المجموعة"><Select name="groupId" required defaultValue=""><option value="" disabled>اختر المجموعة</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</Select></Field>}
       {teacherId && <><Field label="رقم التواصل" hint="خاص بالمعلم ولا يظهر للطالب"><Input name="contactNumber" dir="ltr"/></Field><div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 p-4">
@@ -127,7 +141,7 @@ export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }:
         </div>
       </div></>}
       {!state.ok && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{state.error}</p>}
-      <Button disabled={pending}>{pending ? "جارٍ إنشاء الطالب…" : "إنشاء الطالب وإصدار الرمز"}</Button>
+      <Button disabled={pending || !creationRequestId}>{pending ? "جارٍ إنشاء الطالب…" : "إنشاء الطالب وإصدار الرمز"}</Button>
     </form>
 
     {shouldReveal && <dialog ref={dialogRef} onCancel={(event) => { event.preventDefault(); closeReveal(); }} className="m-auto w-[min(92vw,560px)] rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text)] shadow-2xl backdrop:bg-[#170b35]/70 backdrop:backdrop-blur-sm">
