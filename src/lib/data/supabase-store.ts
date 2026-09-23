@@ -498,7 +498,6 @@ export class SupabaseStore implements BasiraStore {
         "تعذر تأكيد حالة مستخدم Auth لمحاولة الإنشاء الحالية.",
         "ACCOUNT_CREATION_RECONCILIATION_PENDING",
         503,
-        { cause: beforeCreate.error },
       );
     }
 
