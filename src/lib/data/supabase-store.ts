@@ -404,7 +404,6 @@ export class SupabaseStore implements BasiraStore {
           "تعذر تأكيد نتيجة إنشاء الحساب. لم يتم حذف أي بيانات تلقائيًا.",
           "ACCOUNT_CREATION_RECONCILIATION_PENDING",
           503,
-          { cause: reconcileError },
         );
       }
 
@@ -442,7 +441,6 @@ export class SupabaseStore implements BasiraStore {
           "تعذر تأكيد نتيجة إنشاء الحساب. لم يتم حذف أي بيانات تلقائيًا.",
           "ACCOUNT_CREATION_RECONCILIATION_PENDING",
           503,
-          { cause: reconcileError },
         );
       }
 
@@ -452,7 +450,6 @@ export class SupabaseStore implements BasiraStore {
           "حالة إنشاء الحساب تحتاج مراجعة قبل إعادة المحاولة.",
           "ACCOUNT_CREATION_RECOVERY_PENDING",
           503,
-          { cause: error },
         );
       }
 
@@ -462,7 +459,6 @@ export class SupabaseStore implements BasiraStore {
           "تعذر تأكيد تنظيف مستخدم Auth بعد فشل إنشاء الحساب.",
           "ACCOUNT_CREATION_RECOVERY_PENDING",
           503,
-          { cause: error },
         );
       }
       throw error;
@@ -507,7 +503,7 @@ export class SupabaseStore implements BasiraStore {
     }
 
     let directAuthSuccess = false;
-    let secret = generateAccessCode().secret;
+    const secret = generateAccessCode().secret;
 
     if (beforeCreate.status === "absent") {
       let createResult: Awaited<ReturnType<typeof admin.auth.admin.createUser>> | undefined;
