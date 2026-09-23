@@ -117,8 +117,16 @@ function createFakeAdmin(input: {
 
   const rpc = vi.fn((name: string, args: unknown) => {
     rpcCalls.push({ name, args });
+    const execute = async () => {
+      const queue = rpcQueues[name] ?? [];
+      if (name === "get_account_creation_operation_v1" && queue.length === 0) {
+        return { data: null, error: null };
+      }
+      return resolveQueued(queue, `rpc ${name}`);
+    };
     return {
-      single: () => resolveQueued(rpcQueues[name] ?? [], `rpc ${name}`),
+      single: execute,
+      maybeSingle: execute,
     };
   });
 
@@ -198,7 +206,10 @@ describe("Supabase account creation provisioning", () => {
     })).rejects.toMatchObject({ message: "Teacher does not own target Group" });
 
     expect(fake.createUser).not.toHaveBeenCalled();
-    expect(fake.rpcCalls.map((call) => call.name)).toEqual(["prepare_account_creation_v1"]);
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual([
+      "get_account_creation_operation_v1",
+      "prepare_account_creation_v1",
+    ]);
   });
 
   it("rejects an inactive Group during application preflight before Auth creation", async () => {
@@ -240,6 +251,7 @@ describe("Supabase account creation provisioning", () => {
       .rejects.toMatchObject({ message: "auth rejected" });
 
     expect(fake.rpcCalls.map((call) => call.name)).toEqual([
+      "get_account_creation_operation_v1",
       "prepare_account_creation_v1",
       "set_account_creation_cleanup_v1",
     ]);
@@ -261,7 +273,10 @@ describe("Supabase account creation provisioning", () => {
     await expect(store.createTeacher(adminIdentity, teacherInput()))
       .rejects.toMatchObject({ code: "ACCOUNT_CREATION_RECONCILIATION_PENDING" });
 
-    expect(fake.rpcCalls.map((call) => call.name)).toEqual(["prepare_account_creation_v1"]);
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual([
+      "get_account_creation_operation_v1",
+      "prepare_account_creation_v1",
+    ]);
     expect(fake.deleteUser).not.toHaveBeenCalled();
   });
 
@@ -270,7 +285,7 @@ describe("Supabase account creation provisioning", () => {
     const complete = op("complete");
     const fake = createFakeAdmin({
       rpc: {
-        prepare_account_creation_v1: [{ data: prepared, error: null }],
+        get_account_creation_operation_v1: [{ data: prepared, error: null }],
         provision_account_v1: [{ data: complete, error: null }],
       },
       getUser: [missingUser(), presentUser(prepared)],
@@ -304,7 +319,10 @@ describe("Supabase account creation provisioning", () => {
       rpc: {
         prepare_account_creation_v1: [{ data: prepared, error: null }],
         provision_account_v1: [{ throw: new Error("rpc response lost") }],
-        get_account_creation_operation_v1: [{ data: complete, error: null }],
+        get_account_creation_operation_v1: [
+          { data: null, error: null },
+          { data: complete, error: null },
+        ],
       },
       getUser: [missingUser()],
       createUser: [{
@@ -330,7 +348,10 @@ describe("Supabase account creation provisioning", () => {
       rpc: {
         prepare_account_creation_v1: [{ data: prepared, error: null }],
         provision_account_v1: [{ data: null, error: { message: "db rejected" } }],
-        get_account_creation_operation_v1: [{ data: prepared, error: null }],
+        get_account_creation_operation_v1: [
+          { data: null, error: null },
+          { data: prepared, error: null },
+        ],
         set_account_creation_cleanup_v1: [{ data: { state: "cleaned" }, error: null }],
       },
       getUser: [missingUser()],
@@ -357,7 +378,10 @@ describe("Supabase account creation provisioning", () => {
       rpc: {
         prepare_account_creation_v1: [{ data: prepared, error: null }],
         provision_account_v1: [{ data: null, error: { message: "db rejected" } }],
-        get_account_creation_operation_v1: [{ data: prepared, error: null }],
+        get_account_creation_operation_v1: [
+          { data: null, error: null },
+          { data: prepared, error: null },
+        ],
         set_account_creation_cleanup_v1: [{ data: { state: "cleanup_pending" }, error: null }],
       },
       getUser: [missingUser(), presentUser(prepared)],
@@ -383,7 +407,10 @@ describe("Supabase account creation provisioning", () => {
       rpc: {
         prepare_account_creation_v1: [{ data: prepared, error: null }],
         provision_account_v1: [{ throw: new Error("rpc timeout") }],
-        get_account_creation_operation_v1: [{ throw: new Error("reconcile timeout") }],
+        get_account_creation_operation_v1: [
+          { data: null, error: null },
+          { throw: new Error("reconcile timeout") },
+        ],
       },
       getUser: [missingUser()],
       createUser: [{
@@ -404,7 +431,7 @@ describe("Supabase account creation provisioning", () => {
     const complete = op("complete");
     const fake = createFakeAdmin({
       rpc: {
-        prepare_account_creation_v1: [{ data: complete, error: null }],
+        get_account_creation_operation_v1: [{ data: complete, error: null }],
       },
     });
     const store = new SupabaseStore();
@@ -492,7 +519,7 @@ describe("Supabase account creation provisioning", () => {
     const pending = studentOp(teacherIdentity.userId, "cleanup_pending");
     const fake = createFakeAdmin({
       rpc: {
-        prepare_account_creation_v1: [{ data: pending, error: null }],
+        get_account_creation_operation_v1: [{ data: pending, error: null }],
         set_account_creation_cleanup_v1: [{ data: { state: "cleaned" }, error: null }],
       },
       deleteUser: [{ data: { user: null }, error: null }],
@@ -515,6 +542,130 @@ describe("Supabase account creation provisioning", () => {
     expect(fake.rpcCalls.find((call) => call.name === "set_account_creation_cleanup_v1")?.args)
       .toMatchObject({ p_state: "cleaned" });
     expect(fake.createUser).not.toHaveBeenCalled();
+  });
+
+  it("recovers a prepared Auth residue before rejecting a Group that became inactive", async () => {
+    const prepared = studentOp();
+    const fake = createFakeAdmin({
+      rpc: {
+        get_account_creation_operation_v1: [{ data: prepared, error: null }],
+        set_account_creation_cleanup_v1: [{ data: { state: "cleaned" }, error: null }],
+      },
+      getUser: [presentUser(prepared)],
+      groups: [{
+        data: { id: groupId, owner_teacher_id: teacherIdentity.userId, status: "archived" },
+        error: null,
+      }],
+      deleteUser: [{ data: { user: null }, error: null }],
+    });
+    const store = new SupabaseStore();
+    installAdmin(store, fake.admin);
+
+    await expect(store.createStudent(teacherIdentity, {
+      creationRequestId: requestId,
+      displayName: "Student New",
+      groupId,
+      contactNumber: "55500000",
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(fake.deleteUser).toHaveBeenCalledWith(authUserId);
+    expect(fake.createUser).not.toHaveBeenCalled();
+    expect(fake.rpcCalls.some((call) => call.name === "provision_account_v1")).toBe(false);
+    expect(fake.rpcCalls.find((call) => call.name === "set_account_creation_cleanup_v1")?.args)
+      .toMatchObject({ p_state: "cleaned" });
+  });
+
+  it("recovers on a later retry after DB reconciliation was previously unavailable", async () => {
+    const prepared = studentOp();
+    const fake = createFakeAdmin({
+      rpc: {
+        get_account_creation_operation_v1: [
+          { data: null, error: null },
+          { throw: new Error("reconcile timeout") },
+          { data: prepared, error: null },
+        ],
+        prepare_account_creation_v1: [{ data: prepared, error: null }],
+        provision_account_v1: [{ throw: new Error("rpc timeout") }],
+        set_account_creation_cleanup_v1: [{ data: { state: "cleaned" }, error: null }],
+      },
+      getUser: [missingUser(), presentUser(prepared)],
+      createUser: [{
+        data: { user: { id: authUserId, email: syntheticEmail } },
+        error: null,
+      }],
+      groups: [
+        { data: { id: groupId, owner_teacher_id: teacherIdentity.userId, status: "active" }, error: null },
+        { data: { id: groupId, owner_teacher_id: teacherIdentity.userId, status: "archived" }, error: null },
+      ],
+      deleteUser: [{ data: { user: null }, error: null }],
+    });
+    const store = new SupabaseStore();
+    installAdmin(store, fake.admin);
+    const input = {
+      creationRequestId: requestId,
+      displayName: "Student New",
+      groupId,
+      contactNumber: "55500000",
+    };
+
+    await expect(store.createStudent(teacherIdentity, input))
+      .rejects.toMatchObject({ code: "ACCOUNT_CREATION_RECONCILIATION_PENDING" });
+
+    expect(fake.deleteUser).not.toHaveBeenCalled();
+
+    await expect(store.createStudent(teacherIdentity, input))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(fake.deleteUser).toHaveBeenCalledWith(authUserId);
+    expect(fake.createUser).toHaveBeenCalledTimes(1);
+    expect(fake.rpcCalls.filter((call) => call.name === "provision_account_v1")).toHaveLength(1);
+  });
+
+  it("retries prepared recovery after cleanup-state persistence failed", async () => {
+    const prepared = studentOp();
+    const fake = createFakeAdmin({
+      rpc: {
+        get_account_creation_operation_v1: [
+          { data: prepared, error: null },
+          { data: prepared, error: null },
+        ],
+        set_account_creation_cleanup_v1: [
+          { data: null, error: { message: "ledger write failed" } },
+          { data: { state: "cleaned" }, error: null },
+        ],
+      },
+      getUser: [
+        presentUser(prepared),
+        presentUser(prepared),
+        presentUser(prepared),
+      ],
+      groups: [
+        { data: { id: groupId, owner_teacher_id: teacherIdentity.userId, status: "archived" }, error: null },
+        { data: { id: groupId, owner_teacher_id: teacherIdentity.userId, status: "archived" }, error: null },
+      ],
+      deleteUser: [
+        { data: null, error: { message: "delete timeout" } },
+        { data: { user: null }, error: null },
+      ],
+    });
+    const store = new SupabaseStore();
+    installAdmin(store, fake.admin);
+    const input = {
+      creationRequestId: requestId,
+      displayName: "Student New",
+      groupId,
+      contactNumber: "55500000",
+    };
+
+    await expect(store.createStudent(teacherIdentity, input))
+      .rejects.toMatchObject({ code: "ACCOUNT_CREATION_RECOVERY_PENDING" });
+
+    await expect(store.createStudent(teacherIdentity, input))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(fake.deleteUser).toHaveBeenCalledTimes(2);
+    expect(fake.createUser).not.toHaveBeenCalled();
+    expect(fake.rpcCalls.some((call) => call.name === "provision_account_v1")).toBe(false);
   });
 
   it("allows Teacher Student creation only after active owned-Group preflight", async () => {
