@@ -451,8 +451,6 @@ export class SupabaseStore implements BasiraStore {
     role: "teacher" | "student",
     input: CreateUserInput,
   ): Promise<CreatedAccessCode> {
-    await this.preflightAccountCreation(identity, role, input);
-
     let operation = await this.prepareAccountCreation(identity, role, input);
 
     if (operation.state === "complete") {
@@ -461,7 +459,10 @@ export class SupabaseStore implements BasiraStore {
 
     if (operation.state === "cleanup_pending") {
       await this.recoverCleanupPending(identity, operation);
+      await this.preflightAccountCreation(identity, role, input);
       operation = await this.prepareAccountCreation(identity, role, input);
+    } else {
+      await this.preflightAccountCreation(identity, role, input);
     }
 
     if (operation.state !== "prepared") {
