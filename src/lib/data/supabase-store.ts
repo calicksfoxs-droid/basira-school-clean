@@ -488,6 +488,7 @@ export class SupabaseStore implements BasiraStore {
     input: CreateUserInput,
   ): Promise<CreatedAccessCode> {
     let operation = await this.findAccountCreationOperation(identity, input.creationRequestId);
+    const existingOperation = Boolean(operation);
 
     if (!operation) {
       operation = await this.prepareAccountCreation(identity, role, input);
@@ -511,6 +512,10 @@ export class SupabaseStore implements BasiraStore {
         "ACCOUNT_CREATION_RECOVERY_PENDING",
         503,
       );
+    }
+
+    if (!existingOperation) {
+      await this.preflightAccountCreation(identity, role, input);
     }
 
     const admin = this.admin();
@@ -545,7 +550,9 @@ export class SupabaseStore implements BasiraStore {
         throw authorityError;
       }
     } else {
-      await this.preflightAccountCreation(identity, role, input);
+      if (existingOperation) {
+        await this.preflightAccountCreation(identity, role, input);
+      }
 
       let createResult: Awaited<ReturnType<typeof admin.auth.admin.createUser>> | undefined;
       let createThrown: unknown;
