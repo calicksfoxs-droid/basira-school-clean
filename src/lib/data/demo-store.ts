@@ -121,38 +121,122 @@ export class DemoStore implements BasiraStore {
 
   async createTeacher(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode> {
     assertAllowed(identity.role === "admin");
-    return this.createAccount(identity, "teacher", input);
+    return this.createProvisionedAccount(identity, "teacher", input);
   }
 
   async createStudent(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode> {
     assertAllowed(identity.role === "admin" || identity.role === "teacher");
-    if (identity.role === "teacher") {
-      assertAllowed(Boolean(input.groupId), "يجب اختيار مجموعة");
-      const group = assertFound((await readDemoDatabase()).groups.find((g) => g.id === input.groupId));
-      assertAllowed(group.ownerTeacherId === identity.userId);
-    }
-    const created = await this.createAccount(identity, "student", input);
-    if (input.groupId) {
-      await this.addStudentToGroup(identity, input.groupId, created.user.id);
-      if (identity.role === "teacher") {
-        await this.upsertPrivateRecord(identity, {
-          studentId: created.user.id,
-          groupId: input.groupId,
-          contactNumber: input.contactNumber,
-        });
-      }
-    }
-    return created;
+    assertAllowed(Boolean(input.groupId), "اختر مجموعة");
+    return this.createProvisionedAccount(identity, "student", input);
   }
 
-  private async createAccount(identity: Identity, role: Role, input: CreateUserInput): Promise<CreatedAccessCode> {
-    const generated = generateAccessCode();
+  private async createProvisionedAccount(
+    identity: Identity,
+    role: Role,
+    input: CreateUserInput,
+  ): Promise<CreatedAccessCode> {
     return mutateDemoDatabase((db) => {
+      const issueCredential = (userId: string) => {
+        let generated = generateAccessCode();
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          if (!db.credentials.some((credential) => credential.publicRef === generated.publicRef)) break;
+          generated = generateAccessCode();
+        }
+        if (db.credentials.some((credential) => credential.publicRef === generated.publicRef)) {
+          throw new AppError("تعذر إصدار رمز دخول فريد", "ACCESS_CODE_COLLISION", 409);
+        }
+
+        db.credentials
+          .filter((credential) => credential.userId === userId && credential.state !== "disabled")
+          .forEach((credential) => { credential.state = "disabled"; });
+
+        db.credentials.push({
+          id: randomUUID(),
+          userId,
+          publicRef: generated.publicRef,
+          secretHash: hashSecret(generated.secret),
+          codeHint: `BSR-${generated.publicRef}-••••••••`,
+          state: "unused",
+          issuedBy: identity.userId,
+          createdAt: now(),
+        });
+
+        return generated.code;
+      };
+
+      if (role === "teacher") {
+        assertAllowed(identity.role === "admin");
+        assertAllowed(!input.groupId);
+      } else {
+        assertAllowed(identity.role === "admin" || identity.role === "teacher");
+        const group = assertFound(db.groups.find((item) => item.id === input.groupId));
+        assertAllowed(group.status === "active", "المجموعة غير نشطة");
+        if (identity.role === "teacher") assertAllowed(group.ownerTeacherId === identity.userId);
+      }
+
+      const existing = db.users.find((user) => user.id === input.creationRequestId);
+      if (existing) {
+        assertAllowed(existing.role === role && existing.createdBy === identity.userId);
+        assertAllowed(existing.displayName === input.displayName);
+
+        if (role === "student") {
+          const membership = db.memberships.find((item) =>
+            item.studentId === existing.id &&
+            item.groupId === input.groupId &&
+            item.status === "active"
+          );
+          assertFound(membership, "إنشاء الطالب السابق غير مكتمل");
+
+          if (identity.role === "teacher") {
+            assertFound(db.privateRecords.find((record) =>
+              record.teacherId === identity.userId &&
+              record.studentId === existing.id &&
+              record.groupId === input.groupId
+            ), "إنشاء الطالب السابق غير مكتمل");
+          }
+        }
+
+        existing.sessionInvalidBefore = now();
+        return { user: existing, code: issueCredential(existing.id) };
+      }
+
       const createdAt = now();
-      const user: UserRecord = { id: randomUUID(), displayName: input.displayName, role, status: "active", createdBy: identity.userId, sessionInvalidBefore: createdAt, createdAt };
+      const user: UserRecord = {
+        id: input.creationRequestId,
+        displayName: input.displayName,
+        role,
+        status: "active",
+        createdBy: identity.userId,
+        sessionInvalidBefore: createdAt,
+        createdAt,
+      };
+
       db.users.push(user);
-      db.credentials.push({ id: randomUUID(), userId: user.id, publicRef: generated.publicRef, secretHash: hashSecret(generated.secret), codeHint: `BSR-${generated.publicRef}-••••••••`, state: "unused", issuedBy: identity.userId, createdAt: now() });
-      return { user, code: generated.code };
+      const code = issueCredential(user.id);
+
+      if (role === "student") {
+        const groupId = assertFound(input.groupId);
+        db.memberships.push({
+          id: randomUUID(),
+          groupId,
+          studentId: user.id,
+          status: "active",
+          joinedAt: now(),
+        });
+
+        if (identity.role === "teacher") {
+          db.privateRecords.push({
+            id: randomUUID(),
+            teacherId: identity.userId,
+            studentId: user.id,
+            groupId,
+            contactNumber: input.contactNumber,
+            updatedAt: now(),
+          });
+        }
+      }
+
+      return { user, code };
     });
   }
 
