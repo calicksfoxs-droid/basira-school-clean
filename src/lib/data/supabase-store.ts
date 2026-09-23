@@ -385,84 +385,65 @@ export class SupabaseStore implements BasiraStore {
     operation: AccountCreationOperation,
   ): Promise<AccountCreationOperation> {
     const admin = this.admin();
+    let rpcData: unknown;
+    let rpcError: unknown;
+    let rpcThrown: unknown;
 
     try {
-      const { data, error } = await admin
+      const result = await admin
         .rpc("provision_account_v1", {
           p_request_id: operation.requestId,
           p_actor_id: identity.userId,
         })
         .single();
-
-      if (!error && data) return creationOperationFrom(data as Record<string, unknown>);
-
-      let observed: AccountCreationOperation;
-      try {
-        observed = await this.getAccountCreationOperation(identity, operation.requestId);
-      } catch (reconcileError) {
-        throw new AppError(
-          "تعذر تأكيد نتيجة إنشاء الحساب. لم يتم حذف أي بيانات تلقائيًا.",
-          "ACCOUNT_CREATION_RECONCILIATION_PENDING",
-          503,
-        );
-      }
-
-      if (observed.state === "complete") return observed;
-      if (observed.state !== "prepared") {
-        throw new AppError(
-          "حالة إنشاء الحساب تحتاج مراجعة قبل إعادة المحاولة.",
-          "ACCOUNT_CREATION_RECOVERY_PENDING",
-          503,
-        );
-      }
-
-      const cleanup = await this.compensateCreatedAuthUser(
-        identity,
-        observed,
-        error?.message ?? "database provisioning failed",
-      );
-      if (cleanup === "pending") {
-        throw new AppError(
-          "فشل إنشاء الحساب وتعذر تأكيد تنظيف مستخدم Auth. لم يتم كشف رمز الدخول.",
-          "ACCOUNT_CREATION_RECOVERY_PENDING",
-          503,
-        );
-      }
-
-      throw error ?? new Error("تعذر إكمال إنشاء الحساب");
+      rpcData = result.data;
+      rpcError = result.error;
     } catch (error) {
-      if (error instanceof AppError) throw error;
-
-      let observed: AccountCreationOperation;
-      try {
-        observed = await this.getAccountCreationOperation(identity, operation.requestId);
-      } catch (reconcileError) {
-        throw new AppError(
-          "تعذر تأكيد نتيجة إنشاء الحساب. لم يتم حذف أي بيانات تلقائيًا.",
-          "ACCOUNT_CREATION_RECONCILIATION_PENDING",
-          503,
-        );
-      }
-
-      if (observed.state === "complete") return observed;
-      if (observed.state !== "prepared") {
-        throw new AppError(
-          "حالة إنشاء الحساب تحتاج مراجعة قبل إعادة المحاولة.",
-          "ACCOUNT_CREATION_RECOVERY_PENDING",
-          503,
-        );
-      }
-
-      const cleanup = await this.compensateCreatedAuthUser(identity, observed, "ambiguous database provisioning");
-      if (cleanup === "pending") {
-        throw new AppError(
-          "تعذر تأكيد تنظيف مستخدم Auth بعد فشل إنشاء الحساب.",
-          "ACCOUNT_CREATION_RECOVERY_PENDING",
-          503,
-        );
-      }
-      throw error;
+      rpcThrown = error;
     }
+
+    if (!rpcError && !rpcThrown && rpcData) {
+      return creationOperationFrom(rpcData as Record<string, unknown>);
+    }
+
+    let observed: AccountCreationOperation;
+    try {
+      observed = await this.getAccountCreationOperation(identity, operation.requestId);
+    } catch {
+      throw new AppError(
+        "تعذر تأكيد نتيجة إنشاء الحساب. لم يتم حذف أي بيانات تلقائيًا.",
+        "ACCOUNT_CREATION_RECONCILIATION_PENDING",
+        503,
+      );
+    }
+
+    if (observed.state === "complete") return observed;
+    if (observed.state !== "prepared") {
+      throw new AppError(
+        "حالة إنشاء الحساب تحتاج مراجعة قبل إعادة المحاولة.",
+        "ACCOUNT_CREATION_RECOVERY_PENDING",
+        503,
+      );
+    }
+
+    const reason = rpcError && typeof rpcError === "object" && "message" in rpcError
+      ? String(rpcError.message)
+      : rpcThrown
+        ? "ambiguous database provisioning"
+        : "database provisioning returned no result";
+
+    const cleanup = await this.compensateCreatedAuthUser(identity, observed, reason);
+    if (cleanup === "pending") {
+      throw new AppError(
+        "فشل إنشاء الحساب وتعذر تأكيد تنظيف مستخدم Auth. لم يتم كشف رمز الدخول.",
+        "ACCOUNT_CREATION_RECOVERY_PENDING",
+        503,
+      );
+    }
+
+    if (rpcThrown) throw rpcThrown;
+    if (rpcError) throw rpcError;
+    throw new Error("تعذر إكمال إنشاء الحساب");
   }
 
   private async createProvisionedAccount(
