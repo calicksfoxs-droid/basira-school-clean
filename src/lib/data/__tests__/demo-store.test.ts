@@ -153,6 +153,44 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     await expect(store.submitQuiz(student, seededQuizId, validInputs.map((input, index) => index === 0 ? { questionId: input.questionId, selectedOptionId: "غير-صالح" } : input))).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("requires active teacher and active student targets for group ownership and membership", async () => {
+    const store = new DemoStore();
+
+    const disabledTeacherResult = await store.createTeacher(admin, { displayName: "أ. متوقف" });
+    const disabledTeacher: Identity = {
+      userId: disabledTeacherResult.user.id,
+      displayName: disabledTeacherResult.user.displayName,
+      role: "teacher",
+      status: "active",
+    };
+    await store.disableUser(admin, disabledTeacher.userId);
+
+    await expect(store.transferGroup(admin, seededGroupId, disabledTeacher.userId))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const disabledStudentResult = await store.createStudent(admin, { displayName: "طالب متوقف" });
+    await store.disableUser(admin, disabledStudentResult.user.id);
+
+    await expect(store.addStudentToGroup(teacher, seededGroupId, disabledStudentResult.user.id))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("keeps legacy draft lessons hidden from student subject and direct lesson reads", async () => {
+    const store = new DemoStore();
+    const subject = await store.createSubject(teacher, { groupId: seededGroupId, title: "مادة تجريبية" });
+    const draftLesson = await store.createLesson(teacher, {
+      subjectId: subject.id,
+      title: "درس مسودة",
+      structureMode: "direct",
+    });
+
+    const studentSubject = await store.getSubject(student, subject.id);
+    expect(studentSubject.lessons.some((lesson) => lesson.id === draftLesson.id)).toBe(false);
+
+    await expect(store.getLesson(student, draftLesson.id))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("removes the old teacher's access immediately after ownership transfer", async () => {
     const store = new DemoStore();
     const created = await store.createTeacher(admin, { displayName: "أ. منى" });

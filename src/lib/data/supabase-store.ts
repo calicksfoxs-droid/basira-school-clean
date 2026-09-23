@@ -74,26 +74,27 @@ export class SupabaseStore implements BasiraStore {
   }
 
   private async subjectForAccess(identity: Identity, subjectId: string) {
-    const client = this.admin();
-    const { data, error } = await client.from("subjects").select("*").eq("id", subjectId).single();
+    const admin = this.admin();
+    const { data, error } = await admin.from("subjects").select("*").eq("id", subjectId).single();
     if (error) throw error;
     const subject = subjectFrom(data as Record<string, unknown>);
     if (identity.role === "teacher") {
       assertAllowed(subject.ownerTeacherId === identity.userId);
     } else if (identity.role === "student") {
       assertAllowed(subject.status === "active" || subject.status === "published");
-      let groupQuery = client.from("groups").select("id").eq("status", "active");
+      let groupQuery = admin.from("groups").select("id").eq("status", "active");
       groupQuery = subject.groupId ? groupQuery.eq("id", subject.groupId) : groupQuery.eq("subject_id", subject.id);
       const { data: groups, error: groupError } = await groupQuery;
       if (groupError) throw groupError;
       const groupIds = ((groups ?? []) as Array<Record<string, unknown>>).map((row) => String(row.id));
       assertAllowed(groupIds.length > 0);
-      const { count, error: membershipError } = await client.from("group_memberships")
+      const { count, error: membershipError } = await admin.from("group_memberships")
         .select("id", { count: "exact", head: true }).eq("student_id", identity.userId)
         .eq("status", "active").in("group_id", groupIds);
       if (membershipError) throw membershipError;
       assertAllowed((count ?? 0) > 0);
     }
+    const client = identity.role === "student" ? await this.client() : admin;
     return { client, subject };
   }
 
@@ -435,14 +436,48 @@ export class SupabaseStore implements BasiraStore {
 
   async transferGroup(identity: Identity, groupId: string, ownerTeacherId: string) {
     assertAllowed(identity.role === "admin");
+
+    const admin = this.admin();
+    const [ownerResult, groupResult] = await Promise.all([
+      admin.from("profiles").select("id").eq("id", ownerTeacherId).eq("role", "teacher").eq("status", "active").maybeSingle(),
+      admin.from("groups").select("id,subject_id").eq("id", groupId).maybeSingle(),
+    ]);
+    if (ownerResult.error || groupResult.error) throw ownerResult.error ?? groupResult.error;
+    assertFound(ownerResult.data, "المعلم المسؤول غير متاح");
+    const group = assertFound(groupResult.data as Record<string, unknown> | null);
+    assertAllowed(!group.subject_id, "مجموعة المادة تُدار من مالك المادة ولا يمكن نقلها منفردة");
+
     const client = await this.client();
-    const { error } = await client.from("groups").update({ owner_teacher_id: ownerTeacherId }).eq("id", groupId);
+    const { data, error } = await client
+      .from("groups")
+      .update({ owner_teacher_id: ownerTeacherId })
+      .eq("id", groupId)
+      .select("id,owner_teacher_id,subject_id")
+      .single();
     if (error) throw error;
+
+    const transferred = data as Record<string, unknown>;
+    assertAllowed(
+      String(transferred.owner_teacher_id) === ownerTeacherId && !transferred.subject_id,
+      "تعذر تأكيد نقل ملكية المجموعة",
+    );
   }
 
   async addStudentToGroup(identity: Identity, groupId: string, studentId: string) {
     const { client } = await this.groupForWrite(identity, groupId);
-    const { error } = await client.from("group_memberships").upsert({ group_id: groupId, student_id: studentId, status: "active" }, { onConflict: "group_id,student_id" });
+    const { data: student, error: studentError } = await client
+      .from("profiles")
+      .select("id")
+      .eq("id", studentId)
+      .eq("role", "student")
+      .eq("status", "active")
+      .maybeSingle();
+    if (studentError) throw studentError;
+    assertFound(student, "الطالب غير متاح");
+
+    const { error } = await client
+      .from("group_memberships")
+      .upsert({ group_id: groupId, student_id: studentId, status: "active" }, { onConflict: "group_id,student_id" });
     if (error) throw error;
   }
 
@@ -467,9 +502,17 @@ export class SupabaseStore implements BasiraStore {
     const groupResult = subject.groupId
       ? await client.from("groups").select("*").eq("id", subject.groupId).single()
       : { data: null, error: null };
-    const { data: lessonsData, error: lessonError } = await client.from("lessons").select("*").eq("subject_id", subjectId).order("display_order");
+
+    let lessonQuery = client.from("lessons").select("*").eq("subject_id", subjectId);
+    if (identity.role === "student") lessonQuery = lessonQuery.eq("status", "published");
+    const { data: lessonsData, error: lessonError } = await lessonQuery.order("display_order");
+
     if (groupResult.error || lessonError) throw groupResult.error ?? lessonError;
-    return { subject, group: groupResult.data ? groupFrom(groupResult.data as Record<string, unknown>) : undefined, lessons: ((lessonsData ?? []) as Array<Record<string, unknown>>).map(lessonFrom) };
+    return {
+      subject,
+      group: groupResult.data ? groupFrom(groupResult.data as Record<string, unknown>) : undefined,
+      lessons: ((lessonsData ?? []) as Array<Record<string, unknown>>).map(lessonFrom),
+    };
   }
 
   async createLesson(identity: Identity, input: { subjectId: string; title: string; description?: string; structureMode: "direct" | "parts" }): Promise<Lesson> {
@@ -495,8 +538,10 @@ export class SupabaseStore implements BasiraStore {
   }
 
   async getLesson(identity: Identity, lessonId: string): Promise<LessonDetails> {
-    const client = this.admin();
-    const { data: lessonData, error } = await client.from("lessons").select("*").eq("id", lessonId).single();
+    const client = identity.role === "student" ? await this.client() : this.admin();
+    let lessonQuery = client.from("lessons").select("*").eq("id", lessonId);
+    if (identity.role === "student") lessonQuery = lessonQuery.eq("status", "published");
+    const { data: lessonData, error } = await lessonQuery.single();
     if (error) throw error;
     const lesson = lessonFrom(lessonData as Record<string, unknown>);
     const subjectDetails = await this.getSubject(identity, lesson.subjectId);
