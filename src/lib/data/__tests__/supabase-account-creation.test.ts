@@ -51,7 +51,10 @@ function op(state: "prepared" | "complete" | "cleanup_pending" | "cleaned" = "pr
   };
 }
 
-function studentOp(actorId = teacherIdentity.userId, state: "prepared" | "complete" = "prepared") {
+function studentOp(
+  actorId = teacherIdentity.userId,
+  state: "prepared" | "complete" | "cleanup_pending" = "prepared",
+) {
   return {
     request_id: requestId,
     actor_id: actorId,
@@ -228,7 +231,7 @@ describe("Supabase account creation provisioning", () => {
         set_account_creation_cleanup_v1: [{ data: { state: "cleaned" }, error: null }],
       },
       getUser: [missingUser(), missingUser()],
-      createUser: [{ data: { user: null }, error: { message: "auth rejected" } }],
+      createUser: [{ data: { user: null }, error: { status: 400, message: "auth rejected" } }],
     });
     const store = new SupabaseStore();
     installAdmin(store, fake.admin);
@@ -241,6 +244,25 @@ describe("Supabase account creation provisioning", () => {
       "set_account_creation_cleanup_v1",
     ]);
     expect(fake.rpcCalls[1].args).toMatchObject({ p_state: "cleaned" });
+  });
+
+  it("keeps a transport-ambiguous Auth create prepared when immediate lookup is still absent", async () => {
+    const prepared = op();
+    const fake = createFakeAdmin({
+      rpc: {
+        prepare_account_creation_v1: [{ data: prepared, error: null }],
+      },
+      getUser: [missingUser(), missingUser()],
+      createUser: [{ throw: new Error("transport lost") }],
+    });
+    const store = new SupabaseStore();
+    installAdmin(store, fake.admin);
+
+    await expect(store.createTeacher(adminIdentity, teacherInput()))
+      .rejects.toMatchObject({ code: "ACCOUNT_CREATION_RECONCILIATION_PENDING" });
+
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual(["prepare_account_creation_v1"]);
+    expect(fake.deleteUser).not.toHaveBeenCalled();
   });
 
   it("reconciles an ambiguous Auth create by known UUID, provisions once, then resets to a known code", async () => {
@@ -464,6 +486,35 @@ describe("Supabase account creation provisioning", () => {
     expect(prepareCalls).toHaveLength(2);
     expect(prepareCalls[0].args).toMatchObject({ p_request_id: requestId });
     expect(prepareCalls[1].args).toMatchObject({ p_request_id: requestId });
+  });
+
+  it("cleans a prior cleanup_pending Auth residue before rejecting a now-inactive Group", async () => {
+    const pending = studentOp(teacherIdentity.userId, "cleanup_pending");
+    const fake = createFakeAdmin({
+      rpc: {
+        prepare_account_creation_v1: [{ data: pending, error: null }],
+        set_account_creation_cleanup_v1: [{ data: { state: "cleaned" }, error: null }],
+      },
+      deleteUser: [{ data: { user: null }, error: null }],
+      groups: [{
+        data: { id: groupId, owner_teacher_id: teacherIdentity.userId, status: "archived" },
+        error: null,
+      }],
+    });
+    const store = new SupabaseStore();
+    installAdmin(store, fake.admin);
+
+    await expect(store.createStudent(teacherIdentity, {
+      creationRequestId: requestId,
+      displayName: "Student New",
+      groupId,
+      contactNumber: "55500000",
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(fake.deleteUser).toHaveBeenCalledWith(authUserId);
+    expect(fake.rpcCalls.find((call) => call.name === "set_account_creation_cleanup_v1")?.args)
+      .toMatchObject({ p_state: "cleaned" });
+    expect(fake.createUser).not.toHaveBeenCalled();
   });
 
   it("allows Teacher Student creation only after active owned-Group preflight", async () => {
