@@ -365,7 +365,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path=''
-as $
+as $$
 begin
   if new.role is distinct from old.role then
     raise exception 'Profile role cannot be changed directly';
@@ -373,7 +373,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists enforce_profile_role_immutable_v1 on public.profiles;
 
