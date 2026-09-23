@@ -255,7 +255,8 @@ begin
   into v_op
   from private.account_creation_operations o
   where o.request_id=p_request_id
-    and o.actor_id=p_actor_id;
+    and o.actor_id=p_actor_id
+  for update;
 
   if not found then
     raise exception 'Account creation operation not found';
