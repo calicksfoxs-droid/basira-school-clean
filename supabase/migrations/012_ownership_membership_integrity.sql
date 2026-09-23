@@ -3,13 +3,19 @@
 -- membership invariants database-authoritative.
 --
 -- Guarantees:
--- - every group owner is an active teacher
+-- - owner foreign keys remain teacher-role assignments; a new/changed owner
+--   assignment requires an active teacher
 -- - subject-linked group owner must equal root subject owner
+-- - groups.subject_id and subjects.group_id are immutable after INSERT, so the
+--   Legacy and Learning Core ownership models cannot be re-parented via Data API
 -- - legacy group owner changes atomically re-home legacy subjects to the new
 --   teacher and to that teacher's active "صف غير مصنف" fallback grade
--- - subject owner must be an active teacher and must match its grade owner
+-- - subject owner must match its grade owner
 -- - root subject ownership cannot be partially changed while linked groups exist
--- - every membership target is a student; active membership requires active student
+-- - membership targets remain student-role assignments; inserting/reactivating
+--   an active membership requires an active student
+-- - disabling an existing teacher/student does not rewrite historical relations;
+--   effective authorization is revoked by session_is_current()/current_app_role()
 
 do $$
 begin
@@ -17,9 +23,27 @@ begin
     select 1
     from public.groups g
     left join public.profiles p on p.id=g.owner_teacher_id
-    where p.id is null or p.role<>'teacher' or p.status<>'active'
+    where p.id is null or p.role<>'teacher'
   ) then
-    raise exception 'Existing group owner integrity violation';
+    raise exception 'Existing group owner role integrity violation';
+  end if;
+
+  if exists (
+    select 1
+    from public.subjects s
+    left join public.profiles p on p.id=s.owner_teacher_id
+    where p.id is null or p.role<>'teacher'
+  ) then
+    raise exception 'Existing subject owner role integrity violation';
+  end if;
+
+  if exists (
+    select 1
+    from public.curriculum_grades g
+    left join public.profiles p on p.id=g.owner_teacher_id
+    where p.id is null or p.role<>'teacher'
+  ) then
+    raise exception 'Existing grade owner role integrity violation';
   end if;
 
   if exists (
@@ -53,12 +77,20 @@ begin
 
   if exists (
     select 1
-    from public.group_memberships m
-    join public.profiles p on p.id=m.student_id
-    where p.role<>'student'
-       or (m.status='active' and p.status<>'active')
+    from public.groups g
+    join public.subjects legacy_child on legacy_child.group_id=g.id
+    where g.subject_id is not null
   ) then
-    raise exception 'Existing membership target integrity violation';
+    raise exception 'Existing hybrid ownership-model graph';
+  end if;
+
+  if exists (
+    select 1
+    from public.group_memberships m
+    left join public.profiles p on p.id=m.student_id
+    where p.id is null or p.role<>'student'
+  ) then
+    raise exception 'Existing membership target role integrity violation';
   end if;
 end
 $$;
@@ -74,15 +106,25 @@ declare
   v_status text;
   v_subject_owner uuid;
 begin
-  select p.role,p.status
-  into v_role,v_status
-  from public.profiles p
-  where p.id=new.owner_teacher_id;
-
-  if v_role is distinct from 'teacher'
-     or v_status is distinct from 'active'
+  if tg_op='UPDATE'
+     and new.subject_id is distinct from old.subject_id
   then
-    raise exception 'Group owner must be an active teacher';
+    raise exception 'Group subject linkage cannot be changed directly';
+  end if;
+
+  if tg_op='INSERT'
+     or new.owner_teacher_id is distinct from old.owner_teacher_id
+  then
+    select p.role,p.status
+    into v_role,v_status
+    from public.profiles p
+    where p.id=new.owner_teacher_id;
+
+    if v_role is distinct from 'teacher'
+       or v_status is distinct from 'active'
+    then
+      raise exception 'Group owner assignment requires an active teacher';
+    end if;
   end if;
 
   if new.subject_id is not null then
@@ -117,15 +159,25 @@ declare
   v_role text;
   v_status text;
 begin
-  select p.role,p.status
-  into v_role,v_status
-  from public.profiles p
-  where p.id=new.owner_teacher_id;
-
-  if v_role is distinct from 'teacher'
-     or v_status is distinct from 'active'
+  if tg_op='UPDATE'
+     and new.group_id is distinct from old.group_id
   then
-    raise exception 'A subject requires an active teacher owner';
+    raise exception 'Subject ownership model cannot be changed directly';
+  end if;
+
+  if tg_op='INSERT'
+     or new.owner_teacher_id is distinct from old.owner_teacher_id
+  then
+    select p.role,p.status
+    into v_role,v_status
+    from public.profiles p
+    where p.id=new.owner_teacher_id;
+
+    if v_role is distinct from 'teacher'
+       or v_status is distinct from 'active'
+    then
+      raise exception 'Subject owner assignment requires an active teacher';
+    end if;
   end if;
 
   if new.group_id is not null then
