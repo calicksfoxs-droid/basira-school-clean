@@ -35,7 +35,23 @@ const authUserId = "91000000-0000-4000-8000-000000000001";
 const groupId = "92000000-0000-4000-8000-000000000001";
 const syntheticEmail = "basira.91000000000040008000000000000001@access.invalid";
 
-function op(state: "prepared" | "complete" | "cleanup_pending" | "cleaned" = "prepared") {
+type OperationFixture = {
+  request_id: string;
+  actor_id: string;
+  auth_user_id: string;
+  target_role: string;
+  group_id: string | null;
+  display_name: string;
+  public_account_ref: string;
+  synthetic_email: string;
+  contact_number: string | null;
+  state: "prepared" | "complete" | "cleanup_pending" | "cleaned";
+  cleanup_error: string | null;
+};
+
+function op(
+  state: "prepared" | "complete" | "cleanup_pending" | "cleaned" = "prepared",
+): OperationFixture {
   return {
     request_id: requestId,
     actor_id: adminIdentity.userId,
@@ -54,7 +70,7 @@ function op(state: "prepared" | "complete" | "cleanup_pending" | "cleaned" = "pr
 function studentOp(
   actorId = teacherIdentity.userId,
   state: "prepared" | "complete" | "cleanup_pending" = "prepared",
-) {
+): OperationFixture {
   return {
     request_id: requestId,
     actor_id: actorId,
@@ -77,7 +93,7 @@ function missingUser() {
   };
 }
 
-function presentUser(operation = op()) {
+function presentUser(operation: OperationFixture = op()) {
   return {
     data: {
       user: {
