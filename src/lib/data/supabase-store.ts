@@ -101,6 +101,12 @@ function isAuthUserNotFound(error: unknown) {
   return candidate.status === 404 || candidate.code === "user_not_found";
 }
 
+function isDefiniteAuthCreateFailure(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const status = Number((error as { status?: unknown }).status);
+  return Number.isInteger(status) && status >= 400 && status < 500 && status !== 408;
+}
+
 export class SupabaseStore implements BasiraStore {
   private async client() { return createServerSupabaseClient(); }
   private admin() { return createAdminSupabaseClient(); }
@@ -514,8 +520,15 @@ export class SupabaseStore implements BasiraStore {
       } else {
         const afterCreate = await this.inspectAuthCreationUser(operation);
         if (afterCreate.status === "absent") {
-          await this.setAccountCreationCleanupState(identity, operation.requestId, "cleaned");
-          throw createResult?.error ?? createThrown ?? new Error("تعذر إنشاء مستخدم Auth");
+          if (createResult?.error && isDefiniteAuthCreateFailure(createResult.error) && !createThrown) {
+            await this.setAccountCreationCleanupState(identity, operation.requestId, "cleaned");
+            throw createResult.error;
+          }
+          throw new AppError(
+            "نتيجة إنشاء مستخدم Auth غير مؤكدة. أعد المحاولة بنفس الطلب.",
+            "ACCOUNT_CREATION_RECONCILIATION_PENDING",
+            503,
+          );
         }
         if (afterCreate.status === "ambiguous") {
           throw new AppError(
