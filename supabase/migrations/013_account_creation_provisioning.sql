@@ -259,7 +259,7 @@ begin
   for update;
 
   if not found then
-    raise exception 'Account creation operation not found';
+    return;
   end if;
 
   return query
