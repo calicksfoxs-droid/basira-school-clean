@@ -24,7 +24,7 @@ export default async function Page({
   const coreGroupIds = [...new Set(subjectDetails.flatMap((details) => details.groups.map((group) => group.id)))];
   const groupDetails = await Promise.all(coreGroupIds.map((groupId) => store.getGroup(identity, groupId)));
   const groups = groupDetails.map((details) => details.group);
-  const users = [...new Map(groupDetails.flatMap((details) => details.students).map((student) => [student.id, student])).values()];
+  const users = [...new Map(groupDetails.flatMap((details) => details.students).map((student) => [student.id, student] as const)).values()];
   const params = await searchParams;
 
   return <>
