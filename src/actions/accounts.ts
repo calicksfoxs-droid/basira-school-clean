@@ -144,7 +144,10 @@ export async function resetAccessCodeAction(formData: FormData) {
     // the platform-admin boundary; teachers manage enrolment, not identities.
     const identity = await requireRole("admin");
     const userId = formText(formData, "userId");
-    const created = await (await getStore()).resetAccessCode(identity, userId);
+    const store = await getStore();
+    const target = (await store.listUsers(identity)).find((user) => user.id === userId);
+    if (!target || target.status !== "active") throw new AppError("أعد تفعيل الحساب بدل إعادة الرمز", "ACCOUNT_DISABLED", 409);
+    const created = await store.resetAccessCode(identity, userId);
     await setAccessCodeFlash(created.code, created.user.displayName);
   } catch (error) {
     handleActionError(error, path);
@@ -162,7 +165,11 @@ export async function resetAccessCodeWithRevealAction(
 
   try {
     const identity = await requireRole("admin");
-    const created = await (await getStore()).resetAccessCode(identity, formText(formData, "userId"));
+    const store = await getStore();
+    const userId = formText(formData, "userId");
+    const target = (await store.listUsers(identity)).find((user) => user.id === userId);
+    if (!target || target.status !== "active") throw new AppError("أعد تفعيل الحساب بدل إعادة الرمز", "ACCOUNT_DISABLED", 409);
+    const created = await store.resetAccessCode(identity, userId);
     revalidatePath(path);
     return {
       ok: true,
@@ -190,4 +197,19 @@ export async function disableUserAction(formData: FormData) {
   }
 
   redirectNotice(path, "تم تعطيل الحساب");
+}
+
+
+export async function reactivateUserAction(formData: FormData) {
+  const path = returnPath(formData, "/app/admin");
+  try {
+    const identity = await requireRole("admin");
+    const created = await (await getStore()).reactivateUser(identity, formText(formData, "userId"));
+    await setAccessCodeFlash(created.code, created.user.displayName);
+    revalidatePath(path);
+  } catch (error) {
+    handleActionError(error, path);
+  }
+
+  redirect("/app/access-code");
 }
