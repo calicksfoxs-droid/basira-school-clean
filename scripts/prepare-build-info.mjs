@@ -7,6 +7,9 @@ const execFileAsync = promisify(execFile);
 async function resolveCommit() {
   const envCommit = [
     process.env.GITHUB_SHA,
+    process.env.VERCEL_GIT_COMMIT_SHA,
+    process.env.RENDER_GIT_COMMIT,
+    process.env.COMMIT_REF,
     process.env.GIT_COMMIT,
     process.env.CF_PAGES_COMMIT_SHA,
   ].find((value) => value && /^[0-9a-f]{40}$/iu.test(value.trim()));
