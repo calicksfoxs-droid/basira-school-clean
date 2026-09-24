@@ -13,6 +13,9 @@ jobs:
   verify-release:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      BASIRA_BACKEND: demo
+      BASIRA_APP_SECRET: ci-core1-release-verification-secret-not-for-production
     steps:
       - name: Checkout
         uses: actions/checkout@v4

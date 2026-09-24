@@ -13,6 +13,8 @@ const required = [
   "src/components/files/upload-panel.tsx",
   "src/components/lessons/lesson-view.tsx",
   "supabase/migrations/015_core1_shared_login_rate_limit.sql",
+  "supabase/migrations/016_core1_asset_aperture.sql",
+  "src/app/api/files/[id]/route.ts",
   "src/lib/auth/index.ts",
   "src/lib/data/demo-store.ts",
   "src/lib/data/supabase-store.ts",
@@ -74,6 +76,22 @@ if (!bucketBlockMatch) {
 const limiterMigration = await readFile(path.join(root, "supabase/migrations/015_core1_shared_login_rate_limit.sql"), "utf8");
 const recordLimiter = limiterMigration.match(/create or replace function public\.record_login_failure_v1[\s\S]*?\n\$\$;/iu)?.[0] ?? "";
 if (!recordLimiter.includes("pg_advisory_xact_lock")) failures.push("Shared limiter record RPC is not same-key serialized");
+
+const assetMigration = await readFile(path.join(root, "supabase/migrations/016_core1_asset_aperture.sql"), "utf8");
+for (const expected of [
+  "p_kind not in ('video','handout')",
+  "p_mime_type not in ('video/mp4','video/webm')",
+  "p_mime_type<>'application/pdf'",
+  "drop policy if exists storage_teacher_lesson_aids_manage_v1",
+]) {
+  if (!assetMigration.includes(expected)) failures.push(`Core 1.0 asset DB aperture missing: ${expected}`);
+}
+
+const fileRoute = await readFile(path.join(root, "src/app/api/files/[id]/route.ts"), "utf8");
+if (fileRoute.includes('"lesson-aids"') || fileRoute.includes('"submission-files"')) failures.push("File route still serves disabled asset buckets");
+for (const expected of ["video/mp4", "video/webm", "application/pdf"]) {
+  if (!fileRoute.includes(expected)) failures.push(`File route missing supported MIME guard: ${expected}`);
+}
 
 const finalizeRoute = await readFile(path.join(root, "src/app/api/uploads/finalize/route.ts"), "utf8");
 for (const expected of [
