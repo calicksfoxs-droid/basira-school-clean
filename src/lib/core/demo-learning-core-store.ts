@@ -360,6 +360,20 @@ export class DemoLearningCoreStore implements LearningCoreStore {
     });
   }
 
+  async removeStudentFromGroup(identity: Identity, input: { groupId: string; studentId: string }): Promise<void> {
+    assertAllowed(identity.role === "teacher" || identity.role === "admin");
+    await mutateDemoDatabase((database) => {
+      const group = assertFound(database.learningGroups.find((candidate) => candidate.id === input.groupId));
+      ownSubject(database, identity, group.subjectId);
+      const membership = assertFound(database.learningMemberships.find((candidate) =>
+        candidate.groupId === input.groupId &&
+        candidate.studentId === input.studentId &&
+        candidate.status === "active"
+      ), "الطالب غير مسجل في هذه المجموعة");
+      membership.status = "removed";
+    });
+  }
+
   async getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference | undefined> {
     assertAllowed(identity.role === "student");
     const database = await readDemoDatabase();
