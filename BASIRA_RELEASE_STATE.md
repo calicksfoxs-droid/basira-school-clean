@@ -257,6 +257,24 @@ Latest post-verification residue baseline remains clean:
 - duplicate current Credential users = 0;
 - prepared / cleanup_pending operations = 0.
 
+## Pre-delivery verification snapshot
+
+Verified on 2026-09-24 before deployment:
+- green UI fallback integrated into the release line through PR #9;
+- integrated release workflow run `36021693519`: PASS;
+- checked-out/build provenance SHA in that run: `598dfde0f34b1b04254f457de1225b70a6ff71c0`;
+- Next/repository verification: PASS;
+- Vinext/Cloudflare candidate build: PASS;
+- current Production deep-health probe: PASS for service/database readiness, but still reports `commit: "local"`;
+- Phase 1.7 live Auth gate: safely skipped because GitHub still lacks `SUPABASE_SERVICE_ROLE_KEY`; therefore not counted as proof;
+- Cloudflare deployment metadata audit: safely skipped because GitHub still lacks Cloudflare API credentials;
+- final Production residue check: `auth_without_profile=0`, `active_profile_without_current_credential=0`, `duplicate_current_credential_users=0`, `prepared_or_cleanup_pending_operations=0`, `credential_without_profile=0`;
+- Production migration ledger still includes migrations 013, 014, 015, and 016 at the expected versions.
+
+PR hygiene:
+- PR #7 closed as superseded because its head is already an ancestor of the current release line;
+- PR #8 (Astra UI redesign) is intentionally Draft and isolated from the stable fallback until its own final CI/E2E/visual QA is green;
+- PR #9 merged the stable fallback only.
 ## Remaining release gates
 
 Backend contract work for UI may proceed now against the frozen Supported Surface.
