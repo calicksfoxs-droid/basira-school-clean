@@ -33,10 +33,10 @@ begin
 
   if p_kind='video' then
     if p_mime_type not in ('video/mp4','video/webm') then raise exception 'Invalid video MIME type'; end if;
-    if lower(p_storage_path) !~ '\\.(mp4|webm)$' then raise exception 'Invalid video storage path'; end if;
+    if lower(p_storage_path) !~ '\.(mp4|webm)$' then raise exception 'Invalid video storage path'; end if;
   else
     if p_mime_type<>'application/pdf' then raise exception 'Invalid handout MIME type'; end if;
-    if lower(p_storage_path) !~ '\\.pdf$' then raise exception 'Invalid handout storage path'; end if;
+    if lower(p_storage_path) !~ '\.pdf$' then raise exception 'Invalid handout storage path'; end if;
   end if;
 
   if ((p_lesson_id is not null)::int + (p_lesson_part_id is not null)::int)<>1 then
