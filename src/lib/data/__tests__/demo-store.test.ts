@@ -114,6 +114,47 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(database.credentials.filter((item) => item.userId === student.userId && item.state !== "disabled")).toHaveLength(1);
   });
 
+  it("rejects reset for a disabled account and reactivates with one fresh credential", async () => {
+    const store = new DemoStore();
+
+    await store.disableUser(admin, student.userId);
+    await expect(store.resetAccessCode(admin, student.userId))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    const reactivated = await store.reactivateUser(admin, student.userId);
+    const database = await readDemoDatabase();
+    const user = database.users.find((item) => item.id === student.userId);
+
+    expect(reactivated.code).toMatch(/^BSR-[A-Z0-9]{4}-[A-Z0-9]{8}$/);
+    expect(user?.status).toBe("active");
+    expect(database.credentials.filter((item) =>
+      item.userId === student.userId && item.state !== "disabled"
+    )).toHaveLength(1);
+  });
+
+  it("removes and reactivates a membership without disabling the student account", async () => {
+    const store = new DemoStore();
+
+    await store.removeStudentFromGroup(teacher, seededGroupId, student.userId);
+
+    let database = await readDemoDatabase();
+    expect(database.memberships.find((item) =>
+      item.groupId === seededGroupId && item.studentId === student.userId
+    )?.status).toBe("removed");
+    expect(database.users.find((item) => item.id === student.userId)?.status).toBe("active");
+
+    const removedGroup = await store.getGroup(teacher, seededGroupId);
+    expect(removedGroup.students.some((item) => item.id === student.userId)).toBe(false);
+
+    await store.addStudentToGroup(teacher, seededGroupId, student.userId);
+    database = await readDemoDatabase();
+    expect(database.memberships.find((item) =>
+      item.groupId === seededGroupId && item.studentId === student.userId
+    )?.status).toBe("active");
+    expect((await store.getGroup(teacher, seededGroupId)).students.map((item) => item.id))
+      .toContain(student.userId);
+  });
+
   it("supports an optional one-level lesson-parts flow", async () => {
     const store = new DemoStore();
     const subject = await store.createSubject(teacher, { groupId: seededGroupId, title: "الكيمياء" });
