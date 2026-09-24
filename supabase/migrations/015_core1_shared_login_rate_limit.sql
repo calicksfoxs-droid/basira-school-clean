@@ -30,6 +30,13 @@ begin
     raise exception 'Invalid rate-limit key';
   end if;
 
+  -- Serialize same-key failures even before a row exists. Row locking alone
+  -- cannot protect the first concurrent insert wave because there is no row
+  -- to lock yet.
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_key_hash, 0)
+  );
+
   select * into v_row
   from private.login_rate_limits
   where key_hash = p_key_hash
