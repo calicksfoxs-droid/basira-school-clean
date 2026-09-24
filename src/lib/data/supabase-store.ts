@@ -632,6 +632,7 @@ export class SupabaseStore implements BasiraStore {
     const user = assertFound(users.find((item) => item.id === userId));
     if (identity.role === "teacher") assertAllowed(user.role === "student");
     else assertAllowed(identity.role === "admin");
+    assertAllowed(user.status === "active", "الحساب معطل. استخدم إعادة التفعيل بدل إعادة الرمز.");
 
     const generated = generateAccessCode();
     const syntheticEmail = `basira.${generated.publicRef.toLowerCase()}@access.invalid`;
@@ -783,6 +784,43 @@ export class SupabaseStore implements BasiraStore {
     };
   }
 
+  async reactivateUser(identity: Identity, userId: string): Promise<CreatedAccessCode> {
+    assertAllowed(identity.role === "admin");
+    const users = await this.listUsers(identity);
+    const user = assertFound(users.find((item) => item.id === userId));
+    assertAllowed(user.status === "disabled", "الحساب نشط بالفعل");
+
+    const admin = this.admin();
+    const reactivationStartedAt = iso();
+    const { data: activated, error: activationError } = await admin
+      .from("profiles")
+      .update({ status: "active", session_invalid_before: reactivationStartedAt })
+      .eq("id", userId)
+      .eq("status", "disabled")
+      .select("id")
+      .maybeSingle();
+    if (activationError) throw activationError;
+    assertFound(activated, "تعذر بدء إعادة التفعيل");
+
+    try {
+      return await this.resetAccessCode(identity, userId);
+    } catch (error) {
+      const failedAt = iso();
+      const profileResult = await admin
+        .from("profiles")
+        .update({ status: "disabled", session_invalid_before: failedAt })
+        .eq("id", userId);
+      const credentialResult = await admin
+        .from("access_credentials")
+        .update({ state: "disabled", disabled_at: failedAt })
+        .eq("auth_user_id", userId);
+      if (profileResult.error || credentialResult.error) {
+        console.error("Supabase reactivation fail-secure cleanup incomplete", profileResult.error?.message ?? "", credentialResult.error?.message ?? "");
+      }
+      throw error;
+    }
+  }
+
   async disableUser(identity: Identity, userId: string) {
     const users = await this.listUsers(identity);
     const user = assertFound(users.find((u) => u.id === userId));
@@ -900,6 +938,20 @@ export class SupabaseStore implements BasiraStore {
       .from("group_memberships")
       .upsert({ group_id: groupId, student_id: studentId, status: "active" }, { onConflict: "group_id,student_id" });
     if (error) throw error;
+  }
+
+  async removeStudentFromGroup(identity: Identity, groupId: string, studentId: string): Promise<void> {
+    const { client } = await this.groupForWrite(identity, groupId);
+    const { data, error } = await client
+      .from("group_memberships")
+      .update({ status: "removed" })
+      .eq("group_id", groupId)
+      .eq("student_id", studentId)
+      .eq("status", "active")
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    assertFound(data, "الطالب غير مسجل في هذه المجموعة");
   }
 
   async upsertPrivateRecord(identity: Identity, input: Omit<PrivateStudentRecord, "id" | "teacherId" | "updatedAt">) {
