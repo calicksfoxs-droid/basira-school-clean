@@ -15,3 +15,4 @@ function run(command, args) {
 
 run("npx", ["playwright", "install", "--with-deps", "chromium"]);
 run("npx", ["playwright", "test", "--project=desktop-chromium"]);
+run("npx", ["playwright", "test", "test/e2e/roles.spec.ts", "--project=mobile-chromium", "--grep", "يعرض شريط التنقل السفلي"]);
