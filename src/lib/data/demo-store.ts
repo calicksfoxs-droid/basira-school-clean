@@ -270,6 +270,22 @@ export class DemoStore implements BasiraStore {
     });
   }
 
+  async reactivateUser(identity: Identity, userId: string): Promise<CreatedAccessCode> {
+    assertAllowed(identity.role === "admin");
+    const before = await readDemoDatabase();
+    const target = assertFound(before.users.find((user) => user.id === userId));
+    assertAllowed(target.status === "disabled", "الحساب نشط بالفعل");
+
+    const created = await this.resetAccessCode(identity, userId);
+    return mutateDemoDatabase((db) => {
+      const user = assertFound(db.users.find((item) => item.id === userId));
+      assertAllowed(user.status === "disabled", "تغيرت حالة الحساب قبل إعادة التفعيل");
+      user.status = "active";
+      user.sessionInvalidBefore = now();
+      return { user, code: created.code };
+    });
+  }
+
   async listGroups(identity: Identity) { return allowedGroups(identity); }
 
   async getGroup(identity: Identity, groupId: string): Promise<GroupDetails> {
