@@ -91,3 +91,9 @@ deploying if its project hostname no longer resolves.
 - Correct answers are revealed only after the finalized/released submission.
 - Student sees only their own released result.
 - Transfer ownership and failed file replacement adversarial checks pass.
+
+## Multi-host benchmark
+
+For the controlled Cloudflare / Render / Vercel / Netlify comparison, exact-SHA
+verification rules, and benchmark acceptance criteria, see
+`docs/MULTIHOST_DEPLOYMENT.md`.
