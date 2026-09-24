@@ -24,7 +24,10 @@ export function CreateTeacherForm({ returnTo }: { returnTo: string }) {
   const shouldReveal = Boolean(revealed && revealed.code !== dismissedCode);
 
   useEffect(() => {
-    setCreationRequestId((current) => current || globalThis.crypto.randomUUID());
+    const timer = globalThis.setTimeout(() => {
+      setCreationRequestId((current) => current || globalThis.crypto.randomUUID());
+    }, 0);
+    return () => globalThis.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -89,7 +92,10 @@ export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }:
   const shouldReveal = Boolean(revealed && revealed.code !== dismissedCode);
 
   useEffect(() => {
-    setCreationRequestId((current) => current || globalThis.crypto.randomUUID());
+    const timer = globalThis.setTimeout(() => {
+      setCreationRequestId((current) => current || globalThis.crypto.randomUUID());
+    }, 0);
+    return () => globalThis.clearTimeout(timer);
   }, []);
 
   useEffect(() => {

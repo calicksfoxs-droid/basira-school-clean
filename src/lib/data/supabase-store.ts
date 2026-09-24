@@ -717,7 +717,7 @@ export class SupabaseStore implements BasiraStore {
       throw disableError;
     }
 
-    const { data: newCredential, error: credentialError } = await admin
+    const { error: credentialError } = await admin
       .from("access_credentials")
       .insert({
         auth_user_id: userId,

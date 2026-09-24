@@ -29,7 +29,8 @@ export async function createLessonAction(formData: FormData) {
   redirectNotice(path, CORE1_DISABLED_MESSAGE, "error");
 }
 
-ata, "lessonId");
+export async function createLessonPartAction(formData: FormData) {
+  const lessonId = formText(formData, "lessonId");
   const path = returnPath(formData, `/app/teacher/lessons/${lessonId}/edit`);
   try {
     const identity = await requireRole("teacher");
