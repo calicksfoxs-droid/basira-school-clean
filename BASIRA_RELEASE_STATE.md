@@ -11,7 +11,7 @@ Phase 1.7 PR #7 head used as execution base: `aaa02d4cf11652b22a0b2a2f59813ff833
 Core 1.0 execution branch: `release/core-1.0-reset-v2`
 
 Verified code head before this state-only commit:
-`9cf5e21e3171c357941cf67fa6e46fdf9cb912c8`
+`e74e85eab00fa736cc25516c36661d8f7ac0d2d7`
 
 PR #7 remains OPEN / UNMERGED and is not implicitly approved by Core 1.0 execution.
 
@@ -174,7 +174,9 @@ Production evidence:
 - unique active-attempt index exists on `(quiz_id, student_id) where status <> 'void'`;
 - `submit_quiz_phase13a` auto-grades objective questions and immediately sets non-manual submissions to `released`;
 - answer-key tables expose zero Student SELECT policies;
-- legacy DB question types remain stored for compatibility but are outside Core 1.0 authoring/submission aperture.
+- legacy DB question types remain stored for compatibility but are outside Core 1.0 authoring/submission aperture;
+- current Production contains zero essay questions / zero published essay quizzes;
+- authenticated table INSERT grants do not reopen authoring because RLS is enabled on quizzes/questions and there are no INSERT policies.
 
 ## Account / membership lifecycle
 
@@ -228,6 +230,8 @@ Key commits:
 - migration 015: `696900858122df0fc0beaceb77951451b33568d7`
 - runtime limiter: `14937ad038a6d7857c31f8c63ccf078b3534206a`
 - login action: `2ce9442817886c5a721d2a0bde5542c72739afd8`
+- Cloudflare client-IP hardening: `6280753888e339f8910cb94842679326a8d4007d`
+- first-wave concurrency serialization: `e74e85eab00fa736cc25516c36661d8f7ac0d2d7`
 
 Transactional Production verification with rollback:
 - initial: allowed;
@@ -235,6 +239,11 @@ Transactional Production verification with rollback:
 - failure 8: blocked, retry = 900 seconds;
 - separate subsequent check: blocked, retry = 900 seconds;
 - after clear: allowed.
+
+RED follow-up:
+- fixed a same-key first-wave race where concurrent callers could all observe a missing row before INSERT;
+- record RPC now takes a transaction-scoped advisory lock derived from the hashed key before reading/inserting;
+- login now prefers Cloudflare's single-value `CF-Connecting-IP` over `X-Forwarded-For`; fallback XFF uses the last hop rather than trusting a client-controlled first value.
 
 Supabase current documentation supports the chosen permission hardening pattern:
 `security definer` with fixed search path, revoke from public/anon/authenticated, and selective execution grants.
