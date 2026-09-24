@@ -114,6 +114,26 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(database.credentials.filter((item) => item.userId === student.userId && item.state !== "disabled")).toHaveLength(1);
   });
 
+  it("reactivates a disabled account only with a fresh credential", async () => {
+    const store = new DemoStore();
+    await store.disableUser(admin, student.userId);
+
+    let database = await readDemoDatabase();
+    expect(database.users.find((item) => item.id === student.userId)?.status).toBe("disabled");
+    expect(database.credentials.filter((item) =>
+      item.userId === student.userId && item.state !== "disabled"
+    )).toHaveLength(0);
+
+    const result = await store.reactivateUser(admin, student.userId);
+    database = await readDemoDatabase();
+
+    expect(result.code).toMatch(/^BSR-[A-Z0-9]{4}-[A-Z0-9]{8}$/);
+    expect(database.users.find((item) => item.id === student.userId)?.status).toBe("active");
+    expect(database.credentials.filter((item) =>
+      item.userId === student.userId && item.state !== "disabled"
+    )).toHaveLength(1);
+  });
+
   it("supports an optional one-level lesson-parts flow", async () => {
     const store = new DemoStore();
     const subject = await store.createSubject(teacher, { groupId: seededGroupId, title: "الكيمياء" });
@@ -340,6 +360,26 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
       maskedReference: revealed.maskedReference,
       rotatedAt: revealed.rotatedAt,
     });
+  });
+
+  it("removes and re-enrolls a Learning Core membership without disabling the student", async () => {
+    const core = new DemoLearningCoreStore();
+    const subject = (await core.listLearningSubjects(student))[0];
+    const details = await core.getLearningSubject(student, subject.id);
+    const group = details.groups[0];
+
+    await core.removeStudentFromGroup(teacher, { groupId: group.id, studentId: student.userId });
+    expect((await core.listLearningSubjects(student)).some((item) => item.id === subject.id)).toBe(false);
+
+    const reference = await core.rotateEnrollmentReference(student, student.userId);
+    await core.enrollStudentByReference(teacher, { groupId: group.id, enrollmentReference: reference.reference });
+
+    expect((await core.listLearningSubjects(student)).some((item) => item.id === subject.id)).toBe(true);
+    const database = await readDemoDatabase();
+    expect(database.users.find((item) => item.id === student.userId)?.status).toBe("active");
+    expect(database.learningMemberships.find((item) =>
+      item.groupId === group.id && item.studentId === student.userId
+    )?.status).toBe("active");
   });
 
   it("stores only an enrollment fingerprint and links an existing student account", async () => {
