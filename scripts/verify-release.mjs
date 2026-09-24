@@ -8,6 +8,7 @@ const required = [
   "src/app/app/teacher/page.tsx",
   "src/app/app/student/page.tsx",
   "src/app/api/health/route.ts",
+  "scripts/prepare-build-info.mjs",
   "src/app/api/uploads/authorize/route.ts",
   "src/app/api/uploads/finalize/route.ts",
   "src/components/files/upload-panel.tsx",
@@ -117,6 +118,17 @@ for (const storeFile of ["src/lib/data/demo-store.ts", "src/lib/data/supabase-st
   if (/input\.kind === "aid"/u.test(attachBlock)) failures.push(`attachAsset still accepts aid in ${storeFile}`);
   for (const expected of ["video/mp4", "video/webm", "application/pdf"]) {
     if (!attachBlock.includes(expected)) failures.push(`attachAsset missing ${expected} guard in ${storeFile}`);
+  }
+}
+
+const healthRoute = await readFile(path.join(root, "src/app/api/health/route.ts"), "utf8");
+if (!healthRoute.includes('BUILD_COMMIT') || !healthRoute.includes('@/generated/build-info')) {
+  failures.push("Health route is not bound to generated build provenance");
+}
+const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+for (const scriptName of ["build", "build:vinext", "typecheck", "test"]) {
+  if (!String(packageJson.scripts?.[scriptName] ?? "").includes("prepare-build-info.mjs")) {
+    failures.push(`Script ${scriptName} does not prepare build provenance`);
   }
 }
 

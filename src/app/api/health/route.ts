@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isDemoBackend } from "@/lib/env";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { BUILD_COMMIT } from "@/generated/build-info";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
     service: "basira-school-platform",
     backend: isDemoBackend ? "demo" : "supabase",
     ...(database ? { database } : {}),
-    commit: process.env.RENDER_GIT_COMMIT?.slice(0, 12) ?? process.env.GIT_COMMIT?.slice(0, 12) ?? "local",
+    commit: BUILD_COMMIT === "local" ? "local" : BUILD_COMMIT.slice(0, 12),
     timestamp: new Date().toISOString(),
   }, { status: database === "unreachable" ? 503 : 200, headers: { "cache-control": "no-store" } });
 }
