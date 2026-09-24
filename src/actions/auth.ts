@@ -10,8 +10,15 @@ export async function loginAction(formData: FormData) {
   const parsed = accessCodeSchema.safeParse(formData.get("code"));
   if (!parsed.success) redirect(`/login?error=${encodeURIComponent("رمز الدخول غير صالح")}`);
   const requestHeaders = await headers();
-  const forwarded = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const clientAddress = forwarded || requestHeaders.get("x-real-ip") || "unknown";
+  const forwarded = requestHeaders.get("x-forwarded-for")
+    ?.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .at(-1);
+  const clientAddress = requestHeaders.get("cf-connecting-ip")?.trim()
+    || requestHeaders.get("x-real-ip")?.trim()
+    || forwarded
+    || "unknown";
   const publicRef = parsed.data.slice(4, 8);
   const rateKey = `${clientAddress}:${publicRef}`;
   const rate = await checkLoginRateLimit(rateKey);
