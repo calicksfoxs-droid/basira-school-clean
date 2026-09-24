@@ -401,6 +401,33 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return { studentId: String(row.student_id), displayName: String(row.display_name) };
   }
 
+  async removeStudentFromGroup(identity: Identity, input: { groupId: string; studentId: string }): Promise<void> {
+    assertAllowed(identity.role === "teacher" || identity.role === "admin");
+    const admin = this.admin();
+    const { data: groupData, error: groupError } = await admin
+      .from("groups")
+      .select("id,subject_id,owner_teacher_id")
+      .eq("id", input.groupId)
+      .single();
+    if (groupError) throw groupError;
+    const group = groupData as Row;
+    assertAllowed(Boolean(group.subject_id), "المجموعة ليست ضمن Learning Core");
+    if (identity.role === "teacher") {
+      assertAllowed(String(group.owner_teacher_id) === identity.userId);
+    }
+
+    const { data, error } = await admin
+      .from("group_memberships")
+      .update({ status: "removed" })
+      .eq("group_id", input.groupId)
+      .eq("student_id", input.studentId)
+      .eq("status", "active")
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    assertFound(data, "الطالب غير مسجل في هذه المجموعة");
+  }
+
   async getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference | undefined> {
     assertAllowed(identity.role === "student");
     const client = await this.client();
