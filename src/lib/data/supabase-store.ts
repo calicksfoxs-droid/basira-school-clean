@@ -1042,7 +1042,12 @@ export class SupabaseStore implements BasiraStore {
 
   async attachAsset(identity: Identity, input: Omit<Asset, "id" | "createdAt" | "state"> & { state?: Asset["state"] }): Promise<Asset> {
     assertAllowed(identity.role === "teacher");
-    assertAllowed(input.kind === "video" || input.kind === "handout" || input.kind === "aid");
+    assertAllowed(input.kind === "video" || input.kind === "handout", "Core 1.0 يدعم فيديو MP4/WebM وملزمة PDF فقط");
+    assertAllowed(
+      (input.kind === "video" && (input.mimeType === "video/mp4" || input.mimeType === "video/webm")) ||
+      (input.kind === "handout" && input.mimeType === "application/pdf"),
+      "نوع الملف غير مدعوم في Core 1.0",
+    );
     const client = await this.client();
     const { data, error } = await client.rpc("finalize_lesson_asset_phase13a", {
       p_kind: input.kind,

@@ -432,6 +432,13 @@ export class DemoStore implements BasiraStore {
   }
 
   async attachAsset(identity: Identity, input: Omit<Asset, "id" | "createdAt" | "state"> & { state?: Asset["state"] }): Promise<Asset> {
+    assertAllowed(identity.role === "teacher");
+    assertAllowed(input.kind === "video" || input.kind === "handout", "Core 1.0 يدعم فيديو MP4/WebM وملزمة PDF فقط");
+    assertAllowed(
+      (input.kind === "video" && (input.mimeType === "video/mp4" || input.mimeType === "video/webm")) ||
+      (input.kind === "handout" && input.mimeType === "application/pdf"),
+      "نوع الملف غير مدعوم في Core 1.0",
+    );
     return mutateDemoDatabase((db) => {
       if (input.lessonId || input.lessonPartId) {
         const part = input.lessonPartId ? assertFound(db.lessonParts.find((item) => item.id === input.lessonPartId)) : undefined;

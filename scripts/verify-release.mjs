@@ -9,6 +9,10 @@ const required = [
   "src/app/app/student/page.tsx",
   "src/app/api/health/route.ts",
   "src/app/api/uploads/authorize/route.ts",
+  "src/app/api/uploads/finalize/route.ts",
+  "src/components/files/upload-panel.tsx",
+  "src/components/lessons/lesson-view.tsx",
+  "supabase/migrations/015_core1_shared_login_rate_limit.sql",
   "src/lib/auth/index.ts",
   "src/lib/data/demo-store.ts",
   "src/lib/data/supabase-store.ts",
@@ -67,6 +71,37 @@ if (!bucketBlockMatch) {
   }
   if (/\([^)]*true/iu.test(bucketBlockMatch[0])) failures.push("A Storage bucket may be public");
 }
+const limiterMigration = await readFile(path.join(root, "supabase/migrations/015_core1_shared_login_rate_limit.sql"), "utf8");
+const recordLimiter = limiterMigration.match(/create or replace function public\.record_login_failure_v1[\s\S]*?\n\$\$;/iu)?.[0] ?? "";
+if (!recordLimiter.includes("pg_advisory_xact_lock")) failures.push("Shared limiter record RPC is not same-key serialized");
+
+const finalizeRoute = await readFile(path.join(root, "src/app/api/uploads/finalize/route.ts"), "utf8");
+for (const expected of [
+  'payload.kind !== "video" && payload.kind !== "handout"',
+  'payload.mimeType === "video/mp4"',
+  'payload.mimeType === "video/webm"',
+  'payload.mimeType === "application/pdf"',
+]) {
+  if (!finalizeRoute.includes(expected)) failures.push(`Upload finalize missing Core 1.0 aperture guard: ${expected}`);
+}
+if (finalizeRoute.includes('"lesson-aids"')) failures.push("Upload finalize still exposes lesson-aids");
+
+const uploadPanel = await readFile(path.join(root, "src/components/files/upload-panel.tsx"), "utf8");
+if (/\baid\b|image\/(jpeg|png|webp)/iu.test(uploadPanel)) failures.push("Upload panel still exposes disabled aid/image-handout capability");
+
+const lessonView = await readFile(path.join(root, "src/components/lessons/lesson-view.tsx"), "utf8");
+if (/kind="aid"|asset\.kind === "aid"|المساعدات/iu.test(lessonView)) failures.push("Lesson view still exposes disabled aid capability");
+
+for (const storeFile of ["src/lib/data/demo-store.ts", "src/lib/data/supabase-store.ts"]) {
+  const storeSource = await readFile(path.join(root, storeFile), "utf8");
+  const attachBlock = storeSource.match(/async attachAsset[\s\S]*?\n  async getAsset/iu)?.[0] ?? "";
+  if (!attachBlock) failures.push(`attachAsset block missing in ${storeFile}`);
+  if (/input\.kind === "aid"/u.test(attachBlock)) failures.push(`attachAsset still accepts aid in ${storeFile}`);
+  for (const expected of ["video/mp4", "video/webm", "application/pdf"]) {
+    if (!attachBlock.includes(expected)) failures.push(`attachAsset missing ${expected} guard in ${storeFile}`);
+  }
+}
+
 if (failures.length) {
   console.error("Release verification failed:");
   failures.forEach((failure) => console.error(`- ${failure}`));

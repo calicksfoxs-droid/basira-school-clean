@@ -417,6 +417,35 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(preferences).toMatchObject({ userId: student.userId, theme: "dark", reducedMotion: true });
   });
 
+  it("enforces the Core 1.0 MP4/WebM/PDF lesson asset aperture", async () => {
+    const store = new DemoStore();
+
+    await expect(store.attachAsset(teacher, {
+      kind: "aid", lessonId: seededLessonId, title: "مساعدة",
+      storagePath: `${seededGroupId}/${seededLessonId}/direct/aid.pdf`,
+      originalFilename: "aid.pdf", mimeType: "application/pdf", sizeBytes: 64,
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await expect(store.attachAsset(teacher, {
+      kind: "handout", lessonId: seededLessonId, title: "صورة",
+      storagePath: `${seededGroupId}/${seededLessonId}/direct/image.png`,
+      originalFilename: "image.png", mimeType: "image/png", sizeBytes: 64,
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await expect(store.attachAsset(teacher, {
+      kind: "video", lessonId: seededLessonId, title: "فيديو",
+      storagePath: `${seededGroupId}/${seededLessonId}/direct/video.mov`,
+      originalFilename: "video.mov", mimeType: "video/quicktime", sizeBytes: 64,
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    const handout = await store.attachAsset(teacher, {
+      kind: "handout", lessonId: seededLessonId, title: "ملزمة",
+      storagePath: `${seededGroupId}/${seededLessonId}/direct/handout.pdf`,
+      originalFilename: "handout.pdf", mimeType: "application/pdf", sizeBytes: 64,
+    });
+    expect(handout).toMatchObject({ kind: "handout", mimeType: "application/pdf", state: "ready" });
+  });
+
   it("publishes root-subject content only after a real lesson is ready", async () => {
     const core = new DemoLearningCoreStore();
     const content = new DemoStore();

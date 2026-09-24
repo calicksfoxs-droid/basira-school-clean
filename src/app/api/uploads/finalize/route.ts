@@ -8,8 +8,8 @@ import { isDemoBackend } from "@/lib/env";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { verifyUploadToken } from "@/lib/upload-token";
 
-function bucketFor(kind: "video" | "handout" | "aid") {
-  return kind === "video" ? "lesson-videos" : kind === "aid" ? "lesson-aids" : "lesson-handouts";
+function bucketFor(kind: "video" | "handout") {
+  return kind === "video" ? "lesson-videos" : "lesson-handouts";
 }
 
 export async function POST(request: Request) {
@@ -20,6 +20,18 @@ export async function POST(request: Request) {
     const payload = token ? verifyUploadToken(token) : null;
     if (!payload || payload.userId !== identity.userId || !payload.lessonId || payload.kind === "submission") {
       return NextResponse.json({ error: "جلسة الرفع غير صالحة" }, { status: 403 });
+    }
+    if (payload.kind !== "video" && payload.kind !== "handout") {
+      return NextResponse.json({ error: "نوع الملف غير مدعوم في Core 1.0" }, { status: 400 });
+    }
+    const mimeAllowed = payload.kind === "video"
+      ? payload.mimeType === "video/mp4" || payload.mimeType === "video/webm"
+      : payload.mimeType === "application/pdf";
+    const extensionAllowed = payload.kind === "video"
+      ? /\.(mp4|webm)$/iu.test(payload.objectPath)
+      : /\.pdf$/iu.test(payload.objectPath);
+    if (!mimeAllowed || !extensionAllowed) {
+      return NextResponse.json({ error: "نوع أو امتداد الملف غير مدعوم في Core 1.0" }, { status: 400 });
     }
 
     if (isDemoBackend) {
