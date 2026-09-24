@@ -26,6 +26,15 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(own.students.map((item) => item.id)).toContain(student.userId);
   });
 
+  it("rejects essay quiz creation under the Core 1.0 store contract", async () => {
+    const store = new DemoStore();
+    await expect(store.createQuiz(teacher, {
+      lessonId: seededLessonId,
+      title: "اختبار مقالي غير مدعوم",
+      questions: [{ type: "essay_text", prompt: "اكتب شرحًا", points: 2 }],
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("hides objective scores and correct answers until a mixed result is released", async () => {
     const store = new DemoStore();
     const teacherQuiz = await store.getQuiz(teacher, seededQuizId);
