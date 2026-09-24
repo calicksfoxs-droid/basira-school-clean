@@ -55,7 +55,7 @@ Decisions:
 - Objective-only Assessment: MODIFY then ADOPT.
 
 Release-blocking findings:
-- F1 — OPEN.
+- F1 — CLOSED (candidate migration 014; transactional Production dry-run PASS).
 - F2 — OPEN.
 - F3 — OPEN.
 - F4 — OPEN.
@@ -87,7 +87,7 @@ Slice 0 closure:
 - no stored legacy data changed.
 
 ### Slice 1 — F1 locked Lesson read
-Status: IN PROGRESS.
+Status: CLOSED.
 
 Closure criteria:
 - Learning Core future/locked Lesson cannot be read by direct Lesson URL;
@@ -97,7 +97,7 @@ Closure criteria:
 - completion ordering still passes.
 
 ### Slice 2 — F2 asset aperture
-Status: QUEUED.
+Status: IN PROGRESS.
 
 Closure criteria:
 - Core 1.0 authoring accepts only MP4/WebM video and PDF handout;
