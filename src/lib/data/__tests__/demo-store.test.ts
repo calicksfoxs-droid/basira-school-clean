@@ -146,6 +146,7 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
 
     expect(submission.submission).toMatchObject({ quizId, status: "released", totalScore: 2 });
     expect(submission.quiz.lessonPartId).toBe(part.id);
+    expect(submission.questions[0].correctBoolean).toBe(true);
   });
 
   it("rejects incomplete or malformed objective answers", async () => {
