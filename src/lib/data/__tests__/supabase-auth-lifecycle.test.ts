@@ -287,6 +287,79 @@ describe("Supabase auth lifecycle compensation", () => {
     expect(newestWindowTokenIatMs).toBeLessThan(effectiveFinalBoundary);
   });
 
+  it("rejects reset for a disabled account", async () => {
+    const store = new SupabaseStore();
+    vi.spyOn(store, "listUsers").mockResolvedValue([{ ...targetUser, status: "disabled" }]);
+
+    await expect(store.resetAccessCode(adminIdentity, targetUser.id))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("reactivates a disabled account and returns one fresh credential", async () => {
+    const { admin, calls, updateUserById } = makeAdmin({
+      profiles: [
+        { data: { id: targetUser.id }, error: null },
+        { data: previousProfile, error: null },
+        { data: { id: targetUser.id }, error: null },
+        { data: { id: targetUser.id }, error: null },
+      ],
+      credentials: [
+        { data: previousCredentials, error: null },
+        { error: null },
+        { data: { id: "new-cred" }, error: null },
+      ],
+    });
+    const store = new SupabaseStore();
+    vi.spyOn(store, "listUsers")
+      .mockResolvedValueOnce([{ ...targetUser, status: "disabled" }])
+      .mockResolvedValueOnce([{ ...targetUser, status: "active" }]);
+    const storeWithAdmin = store as unknown as { admin: () => typeof admin };
+    vi.spyOn(storeWithAdmin, "admin").mockReturnValue(admin);
+
+    const result = await store.reactivateUser(adminIdentity, targetUser.id);
+    const profileUpdates = tableUpdates(calls, "profiles");
+
+    expect(result.code).toBe("BSR-ZX90-AB12CD34");
+    expect(updateUserById).toHaveBeenCalledTimes(1);
+    expect(profileUpdates).toHaveLength(3);
+    expect(profileUpdates[0].payload).toMatchObject({ status: "active" });
+    expect(profileUpdates[1].payload).toMatchObject({ status: "disabled" });
+    expect(profileUpdates[2].payload).toMatchObject({ status: "active" });
+  });
+
+  it("leaves reactivation fail-secure when Auth reset is ambiguous", async () => {
+    const { admin, calls, updateUserById } = makeAdmin({
+      profiles: [
+        { data: { id: targetUser.id }, error: null },
+        { data: previousProfile, error: null },
+        { data: { id: targetUser.id }, error: null },
+        { error: null },
+      ],
+      credentials: [
+        { data: previousCredentials, error: null },
+        { error: null },
+        { data: { id: "new-cred" }, error: null },
+        { error: null },
+      ],
+      authUpdateError: { message: "ambiguous auth failure" },
+    });
+    const store = new SupabaseStore();
+    vi.spyOn(store, "listUsers")
+      .mockResolvedValueOnce([{ ...targetUser, status: "disabled" }])
+      .mockResolvedValueOnce([{ ...targetUser, status: "active" }]);
+    const storeWithAdmin = store as unknown as { admin: () => typeof admin };
+    vi.spyOn(storeWithAdmin, "admin").mockReturnValue(admin);
+
+    await expect(store.reactivateUser(adminIdentity, targetUser.id))
+      .rejects.toMatchObject({ message: "ambiguous auth failure" });
+
+    expect(updateUserById).toHaveBeenCalledTimes(1);
+    const profileUpdates = tableUpdates(calls, "profiles");
+    const credentialUpdates = tableUpdates(calls, "access_credentials");
+    expect(profileUpdates.at(-1)?.payload).toMatchObject({ status: "disabled" });
+    expect(credentialUpdates.at(-1)?.payload).toMatchObject({ state: "disabled" });
+  });
+
   it("surfaces disable bookkeeping failure without re-enabling the profile", async () => {
     const { admin, calls } = makeAdmin({
       profiles: [{ error: null }],
