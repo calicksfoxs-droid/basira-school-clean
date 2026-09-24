@@ -10,6 +10,13 @@ async function loginAsTeacher(page: Page) {
   await expect(page).toHaveURL(/\/app\/teacher$/);
 }
 
+async function loginAsStudent(page: Page) {
+  await page.goto("/login");
+  await page.locator('input[name="code"]').fill("BSR-STDN-DEMO2026");
+  await page.locator("form").getByRole("button").click();
+  await expect(page).toHaveURL(/\/app\/student$/);
+}
+
 test("teacher can create a subject and reach its authoring workspace", async ({ page }) => {
   await loginAsTeacher(page);
   await page.goto(`/app/teacher/grades/${seededGradeId}`);
@@ -131,4 +138,94 @@ test("Core 1.0 student creation hides deferred contact and finance fields", asyn
   await expect(page.getByLabel("رقم التواصل")).toHaveCount(0);
   await expect(page.getByLabel("المبلغ / الحالة")).toHaveCount(0);
   await expect(page.getByLabel("ملاحظة مالية خاصة")).toHaveCount(0);
+});
+
+
+test("Core 1.0 objective quiz auto-releases and remains single-attempt", async ({ page }) => {
+  test.setTimeout(90_000);
+  await loginAsTeacher(page);
+  await page.goto(`/app/teacher/grades/${seededGradeId}`);
+
+  const subjectTitle = "E2E Objective Assessment";
+  await page.locator('input[name="title"]').fill(subjectTitle);
+  await page.locator("form").filter({ has: page.locator('input[name="title"]') }).getByRole("button").click();
+  await expect(page).toHaveURL(/\/app\/teacher\/subjects\/[0-9a-f-]{36}$/);
+  const subjectUrl = page.url();
+
+  const groupTitle = "E2E Objective Group";
+  await page.getByRole("button", { name: "مجموعة جديدة", exact: true }).click();
+  let panel = page.getByRole("dialog");
+  await panel.getByLabel("اسم المجموعة").fill(groupTitle);
+  await panel.getByRole("button", { name: "إنشاء المجموعة" }).click();
+  await expect(panel.getByText("تم إنشاء المجموعة", { exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "إغلاق اللوحة" }).click();
+
+  await page.getByRole("button", { name: "تسجيل طالب", exact: true }).click();
+  panel = page.getByRole("dialog");
+  await panel.getByLabel("المجموعة").selectOption({ label: groupTitle });
+  await panel.getByLabel("معرّف الانضمام").fill("BSR-S-ABCDEFGHJKLM");
+  await panel.getByRole("button", { name: "إضافة الطالب للمجموعة" }).click();
+  await expect(panel.getByText("تمت إضافة الطالب", { exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "إغلاق اللوحة" }).click();
+
+  const unitCard = page.getByRole("article").first();
+  const lessonTitle = "E2E Objective Lesson";
+  const lessonForm = unitCard.locator("form").filter({ has: page.locator('input[name="title"]') });
+  await lessonForm.locator('input[name="title"]').fill(lessonTitle);
+  await lessonForm.getByRole("button", { name: "إضافة درس" }).click();
+  await expect(unitCard.getByText(lessonTitle, { exact: true })).toBeVisible();
+
+  await unitCard.locator('a[href^="/app/teacher/lessons/"]').filter({ hasText: lessonTitle }).click();
+  await expect(page).toHaveURL(/\/app\/teacher\/lessons\/[0-9a-f-]+\/edit$/);
+  const lessonEditUrl = page.url();
+  await page.getByText("أدوات رفع محتوى الدرس", { exact: true }).click();
+  await page.getByRole("link", { name: "إنشاء اختبار" }).click();
+
+  const quizTitle = "E2E Objective Quiz";
+  await page.getByLabel("عنوان الاختبار").fill(quizTitle);
+  await page.getByLabel("تعليمات قصيرة").fill("اختبار موضوعي تلقائي");
+  await page.getByLabel("نص السؤال").first().fill("2 + 2 = ?");
+  const optionInputs = page.locator('input[type="radio"][name^="correct_"] + input');
+  await optionInputs.nth(0).fill("4");
+  await optionInputs.nth(1).fill("5");
+
+  await page.getByRole("button", { name: "سؤال جديد" }).click();
+  await page.getByLabel("النوع").nth(1).selectOption("true_false");
+  await page.getByLabel("نص السؤال").nth(1).fill("الماء يتجمد عند صفر درجة مئوية");
+  await page.getByRole("button", { name: "حفظ ونشر الاختبار" }).click();
+  await expect(page).toHaveURL(/\/app\/teacher\/quizzes\/[0-9a-f-]+\/edit$/);
+  const quizId = page.url().match(/\/quizzes\/([0-9a-f-]+)\/edit$/)?.[1];
+  expect(quizId).toBeTruthy();
+
+  await page.goto(lessonEditUrl);
+  await page.getByRole("button", { name: "نشر الدرس" }).click();
+  await expect(page.getByRole("button", { name: "الدرس منشور" })).toBeDisabled();
+
+  await page.goto(subjectUrl);
+  const publishedUnitCard = page.getByRole("article").filter({ hasText: lessonTitle });
+  await publishedUnitCard.getByRole("button", { name: "نشر الوحدة" }).click();
+  await expect(publishedUnitCard.getByText("تم نشر الوحدة", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "نشر المادة للطلاب" }).click();
+  await expect(page.getByText("تم نشر المادة", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "تسجيل الخروج" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await loginAsStudent(page);
+
+  await page.goto(`/app/student/quizzes/${quizId}`);
+  await expect(page.getByRole("heading", { name: quizTitle })).toBeVisible();
+  await page.locator("label").filter({ hasText: /^4$/ }).click();
+  await page.locator("label").filter({ hasText: /^صح$/ }).click();
+  await page.getByRole("button", { name: "تسليم الاختبار نهائيًا" }).click();
+
+  await expect(page).toHaveURL(/\/app\/student\/results\/[0-9a-f-]+$/);
+  const resultUrl = page.url();
+  await expect(page.getByRole("heading", { name: quizTitle })).toBeVisible();
+  await expect(page.getByText("2 / 2", { exact: true })).toBeVisible();
+  await expect(page.getByText("النتيجة متاحة", { exact: true })).toBeVisible();
+  await expect(page.getByText("الإجابة الصحيحة", { exact: true }).first()).toBeVisible();
+
+  await page.goto(`/app/student/quizzes/${quizId}`);
+  await expect(page).toHaveURL(resultUrl);
 });
