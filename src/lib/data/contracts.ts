@@ -53,6 +53,7 @@ export interface BasiraStore {
   createStudent(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode>;
   resetAccessCode(identity: Identity, userId: string): Promise<CreatedAccessCode>;
   disableUser(identity: Identity, userId: string): Promise<void>;
+  reactivateUser(identity: Identity, userId: string): Promise<CreatedAccessCode>;
 
   listGroups(identity: Identity): Promise<Group[]>;
   getGroup(identity: Identity, groupId: string): Promise<GroupDetails>;
