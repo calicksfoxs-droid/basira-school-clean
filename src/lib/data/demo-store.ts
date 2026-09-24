@@ -451,6 +451,7 @@ export class DemoStore implements BasiraStore {
   }
 
   async createQuiz(identity: Identity, input: { lessonId?: string; lessonPartId?: string; title: string; instructions?: string; questions: CreateQuestionInput[] }): Promise<string> {
+    assertAllowed(input.questions.every((question) => question.type === "mcq" || question.type === "true_false"), "Core 1.0 يدعم أسئلة الاختيار من متعدد والصح والخطأ فقط");
     return mutateDemoDatabase((db) => {
       const part = input.lessonPartId ? assertFound(db.lessonParts.find((item) => item.id === input.lessonPartId)) : undefined;
       const lesson = assertFound(db.lessons.find((item) => item.id === (input.lessonId ?? part?.lessonId)));
