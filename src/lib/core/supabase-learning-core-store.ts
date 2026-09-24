@@ -401,12 +401,13 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return { studentId: String(row.student_id), displayName: String(row.display_name) };
   }
 
-  async getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference> {
+  async getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference | undefined> {
     assertAllowed(identity.role === "student");
     const client = await this.client();
     const { data, error } = await client.rpc("get_own_enrollment_reference_v1");
     if (error) throw error;
-    return referenceFrom(assertFound(((data ?? []) as Row[])[0]));
+    const row = ((data ?? []) as Row[])[0];
+    return row ? referenceFrom(row) : undefined;
   }
 
   async rotateEnrollmentReference(identity: Identity, studentId: string): Promise<RevealedStudentEnrollmentReference> {
