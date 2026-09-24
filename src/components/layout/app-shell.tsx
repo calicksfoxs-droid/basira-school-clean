@@ -16,7 +16,6 @@ function nav(identity: Identity): NavItem[] {
     { href: "/app/admin/subjects", label: "المواد", icon: "subjects", mobile: true },
     { href: "/app/admin/teachers", label: "المعلمون", icon: "teachers" },
     { href: "/app/admin/students", label: "الطلاب", icon: "users", mobile: true },
-    { href: "/app/admin/groups", label: "المجموعات", icon: "school" },
     { href: "/app/admin/announcements", label: "الإعلانات", icon: "announcements" },
     { href: "/app/settings", label: "الإعدادات", icon: "settings", mobile: true },
   ];

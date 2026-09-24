@@ -99,19 +99,20 @@ test("teacher can build a unit, group, lesson, and attach a PDF", async ({ page 
   expect((await finalized).ok()).toBe(true);
   await expect(page.getByText("e2e-handout.pdf", { exact: true })).toBeVisible();
 
-  const imageFinalized = page.waitForResponse((response) => response.url().endsWith("/api/uploads/finalize") && response.request().method() === "POST");
+  await expect(page.locator('input[accept*="application/pdf"]')).toHaveCount(1);
+  const rejectedImage = page.waitForResponse((response) =>
+    response.url().endsWith("/api/uploads/authorize") &&
+    response.request().method() === "POST" &&
+    response.status() === 400,
+  );
   await handoutInput.setInputFiles({
     name: "e2e-lesson-image.png",
     mimeType: "image/png",
     buffer: Buffer.from("89504e470d0a1a0a", "hex"),
   });
-  expect((await imageFinalized).ok()).toBe(true);
-  await expect(page.getByText("e2e-lesson-image.png", { exact: true })).toBeVisible();
-
-  const aidFinalized = page.waitForResponse((response) => response.url().endsWith("/api/uploads/finalize") && response.request().method() === "POST");
-  await page.locator('input[accept*="application/pdf"]').nth(1).setInputFiles({ name: "e2e-aid.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\nE2E aid\n") });
-  expect((await aidFinalized).ok()).toBe(true);
-  await expect(page.getByText("e2e-aid.pdf", { exact: true })).toBeVisible();
+  expect((await rejectedImage).ok()).toBe(false);
+  await expect(page.getByText("الملزمة يجب أن تكون PDF", { exact: true })).toBeVisible();
+  await expect(page.getByText("e2e-lesson-image.png", { exact: true })).toHaveCount(0);
 
   const publishLessonForm = page.locator("form").filter({ has: page.locator('input[name="lessonId"]') });
   await publishLessonForm.getByRole("button").click();
@@ -120,34 +121,14 @@ test("teacher can build a unit, group, lesson, and attach a PDF", async ({ page 
   await expect(page.getByText(lessonTitle, { exact: true })).toBeVisible();
 });
 
-test("teacher finance notes stay in the browser and are absent from admin", async ({ page }) => {
+test("Core 1.0 student creation hides deferred contact and finance fields", async ({ page }) => {
   await loginAsTeacher(page);
   await page.goto("/app/teacher/students");
 
-  const amountInput = page.getByLabel("المبلغ / الحالة");
-  const noteInput = page.getByLabel("ملاحظة مالية خاصة");
-  await expect(amountInput).toBeVisible();
-  await expect(amountInput).not.toHaveAttribute("name");
-  await expect(noteInput).not.toHaveAttribute("name");
-
-  await page.getByLabel("اسم الطالب").fill("طالب مالية محلية");
-  await page.getByLabel("المجموعة").selectOption({ index: 1 });
-  await amountInput.fill("مدفوع بالكامل");
-  await noteInput.fill("لا تُرسل إلى الخادم");
-  await page.getByRole("button", { name: "إنشاء الطالب وإصدار الرمز" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-
-  const localDatabase = await page.evaluate(() => window.localStorage.getItem("basira:teacher-finance:v1:00000000-0000-4000-8000-000000000002"));
-  expect(localDatabase).toContain("مدفوع بالكامل");
-  expect(localDatabase).toContain("لا تُرسل إلى الخادم");
-});
-
-test("admin never sees teacher-only finance fields", async ({ page }) => {
-  await page.goto("/login");
-  await page.locator('input[name="code"]').fill("BSR-ADMN-DEMO2026");
-  await page.locator("form").getByRole("button").click();
-  await expect(page).toHaveURL(/\/app\/admin$/);
-  await page.goto("/app/admin/students");
+  const createStudentForm = page.locator("form").filter({ has: page.getByLabel("اسم الطالب") });
+  await expect(createStudentForm.getByLabel("اسم الطالب")).toBeVisible();
+  await expect(createStudentForm.getByLabel("المجموعة")).toBeVisible();
+  await expect(page.getByLabel("رقم التواصل")).toHaveCount(0);
   await expect(page.getByLabel("المبلغ / الحالة")).toHaveCount(0);
   await expect(page.getByLabel("ملاحظة مالية خاصة")).toHaveCount(0);
 });

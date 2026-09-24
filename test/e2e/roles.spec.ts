@@ -164,6 +164,7 @@ test("يعرض شريط التنقل السفلي بأربع وجهات على �
   // viewports. Keyboard activation verifies the real accessible link without
   // letting that development-only overlay intercept the pointer.
   await nav.getByRole("link", { name: "حسابي", exact: true }).press("Enter");
-  await expect(page).toHaveURL(/\/app\/settings$/);
-  await expect(page.getByRole("heading", { name: "الإعدادات" })).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/settings\/enrollment-reference$/);
+  await expect(page.getByRole("heading", { name: "حسابي" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "حسابي", exact: true })).toHaveAttribute("aria-current", "page");
 });

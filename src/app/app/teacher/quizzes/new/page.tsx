@@ -11,5 +11,5 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ l
   const details = await (await getStore()).getLesson(identity, lessonId);
   if (lessonPartId && !details.parts.some((part) => part.id === lessonPartId)) throw new Error("lessonPartId is invalid");
   if ((details.lesson.structureMode === "direct" && lessonPartId) || (details.lesson.structureMode === "parts" && !lessonPartId)) throw new Error("Quiz parent does not match lesson structure");
-  return <><PageHeader title="إنشاء اختبار" description="أربعة أنواع فقط؛ واضح وسهل التصحيح."/><Card><QuizBuilder lessonId={lessonPartId ? undefined : lessonId} lessonPartId={lessonPartId}/></Card></>;
+  return <><PageHeader title="إنشاء اختبار" description="اختياري وصح/خطأ فقط — تصحيح تلقائي ونتيجة فورية."/><Card><QuizBuilder lessonId={lessonPartId ? undefined : lessonId} lessonPartId={lessonPartId}/></Card></>;
 }
