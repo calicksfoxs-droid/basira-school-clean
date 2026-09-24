@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, type ReactNode } from "react";
+import { notify } from "./toast";
 import type { ActionResult } from "@/lib/action-result";
 
 type ServerFormAction = (formData: FormData) => Promise<ActionResult<unknown>>;
@@ -15,12 +16,16 @@ export function ActionForm({
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(
-    async (_previous: ActionResult<unknown>, formData: FormData) => action(formData),
+    async (_previous: ActionResult<unknown>, formData: FormData) => {
+      const result = await action(formData);
+      notify(result.ok ? result.message || "تم الحفظ بنجاح" : result.error, !result.ok);
+      return result;
+    },
     { ok: true, data: undefined } as ActionResult<unknown>,
   );
 
   return (
-    <form action={formAction} className={className}>
+    <form aria-busy={pending} action={formAction} className={className}>
       <fieldset disabled={pending} className="contents">
         {children}
       </fieldset>

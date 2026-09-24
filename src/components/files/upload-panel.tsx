@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import * as tus from "tus-js-client";
 import { FileText, UploadCloud, Video, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { notify } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 
 type UploadKind = "video" | "handout";
@@ -42,9 +43,10 @@ export function UploadPanel({ lessonId, lessonPartId, kind }: { lessonId: string
       }
       const finalize = await fetch("/api/uploads/finalize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: setup.token }) });
       if (!finalize.ok) throw new Error((await finalize.json()).error || "تعذر اعتماد الملف");
+      notify("اكتمل رفع الملف واعتماده");
       router.refresh();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "فشل الرفع"); }
-    finally { setBusy(false); }
+    } catch (caught) { const message = caught instanceof Error ? caught.message : "فشل الرفع"; setError(message); notify(message, true); }
+    finally { setBusy(false); if (input.current) input.current.value = ""; }
   }
-  return <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--soft)] p-5"><input ref={input} type="file" hidden accept={kind === "video" ? "video/mp4,video/webm" : "application/pdf"} onChange={(event) => { const file=event.target.files?.[0]; if(file) void upload(file); }}/><div className="flex flex-wrap items-center gap-4"><div className="grid size-12 place-items-center rounded-xl bg-[var(--surface)] text-[var(--brand)] shadow-sm"><Icon className="size-6"/></div><div className="min-w-0 flex-1"><p className="font-black">{label}</p><p className="mt-1 text-xs text-[var(--muted)]">{kind === "video" ? "يدعم MP4 وWebM مع رفع قابل للاستكمال." : "يدعم PDF فقط."}</p>{progress !== null && <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--border)]"><div className="h-full bg-[var(--brand)] transition-all" style={{ width: `${progress}%` }}/></div>}{error && <p className="mt-2 flex items-center gap-1 text-xs font-bold text-red-600"><XCircle className="size-4"/>{error}</p>}</div><Button type="button" variant="secondary" disabled={busy} onClick={() => input.current?.click()}><UploadCloud className="size-4"/>{busy ? `جارٍ الرفع ${progress ?? 0}%` : "اختيار ملف"}</Button></div></div>;
+  return <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--soft)] p-5"><input ref={input} type="file" hidden accept={kind === "video" ? "video/mp4,video/webm" : "application/pdf"} onChange={(event) => { const file=event.target.files?.[0]; if(file) void upload(file); }}/><div className="flex flex-wrap items-center gap-4"><div className="grid size-12 place-items-center rounded-xl bg-[var(--surface)] text-[var(--brand)] shadow-sm"><Icon className="size-6"/></div><div className="min-w-0 flex-1"><p className="font-black">{label}</p><p className="mt-1 text-xs text-[var(--muted)]">{kind === "video" ? "يدعم MP4 وWebM مع رفع قابل للاستكمال." : "يدعم PDF فقط."}</p>{progress !== null && <div role="progressbar" aria-label="تقدم رفع الملف" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--border)]"><div className="h-full bg-[var(--brand)] transition-all" style={{ width: `${progress}%` }}/></div>}{error && <p className="mt-2 flex items-center gap-1 text-xs font-bold text-red-600"><XCircle className="size-4"/>{error}</p>}</div><Button type="button" variant="secondary" disabled={busy} onClick={() => input.current?.click()}><UploadCloud className="size-4"/>{busy ? `جارٍ الرفع ${progress ?? 0}%` : "اختيار ملف"}</Button></div></div>;
 }

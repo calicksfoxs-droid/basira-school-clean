@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 const variants = cva("focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50", {
   variants: {
     variant: {
-      primary: "bg-[var(--brand)] text-white hover:brightness-95 active:translate-y-px",
+      primary: "bg-[var(--primary)] text-[var(--on-primary)] hover:brightness-95 active:translate-y-px",
       teal: "bg-[var(--teal)] text-white hover:brightness-95 active:translate-y-px",
       coral: "bg-[var(--coral)] text-white hover:brightness-95 active:translate-y-px",
       yellow: "bg-[var(--yellow)] text-[var(--violet)] hover:brightness-95 active:translate-y-px",
