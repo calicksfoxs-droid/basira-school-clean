@@ -39,6 +39,7 @@ export async function submitQuizFormAction(formData: FormData) {
     identity = await requireRole("student");
     store = await getStore();
     quiz = await store.getQuiz(identity, quizId);
+    if (!quiz.questions.every((question) => question.type === "mcq" || question.type === "true_false")) throw new AppError(CORE1_DISABLED_MESSAGE, "CORE1_DISABLED", 409);
     const answers = quiz.questions.map((question) => {
       if (question.type === "mcq") return { questionId: question.id, selectedOptionId: String(formData.get(`question_${question.id}`) ?? "") || undefined };
       if (question.type === "true_false") return { questionId: question.id, booleanValue: formData.get(`question_${question.id}`) === "true" };
