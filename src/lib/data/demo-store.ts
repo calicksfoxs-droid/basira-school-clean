@@ -249,11 +249,37 @@ export class DemoStore implements BasiraStore {
         const ownGroupIds = new Set(db.groups.filter((g) => g.ownerTeacherId === identity.userId).map((g) => g.id));
         assertAllowed(db.memberships.some((m) => m.studentId === user.id && ownGroupIds.has(m.groupId)));
       } else assertAllowed(identity.role === "admin");
+      assertAllowed(user.status === "active", "الحساب معطل. استخدم إعادة التفعيل بدل إعادة الرمز.");
       db.credentials.filter((c) => c.userId === userId).forEach((c) => { c.state = "disabled"; });
       user.sessionInvalidBefore = now();
       db.credentials.push({ id: randomUUID(), userId, publicRef: generated.publicRef, secretHash: hashSecret(generated.secret), codeHint: `BSR-${generated.publicRef}-••••••••`, state: "unused", issuedBy: identity.userId, lastResetAt: now(), createdAt: now() });
       return { user, code: generated.code };
     });
+  }
+
+  async reactivateUser(identity: Identity, userId: string): Promise<CreatedAccessCode> {
+    assertAllowed(identity.role === "admin");
+    await mutateDemoDatabase((db) => {
+      const user = assertFound(db.users.find((item) => item.id === userId));
+      assertAllowed(user.status === "disabled", "الحساب نشط بالفعل");
+      user.status = "active";
+      user.sessionInvalidBefore = now();
+    });
+
+    try {
+      return await this.resetAccessCode(identity, userId);
+    } catch (error) {
+      await mutateDemoDatabase((db) => {
+        const user = db.users.find((item) => item.id === userId);
+        if (user) {
+          user.status = "disabled";
+          user.sessionInvalidBefore = now();
+        }
+        db.credentials.filter((credential) => credential.userId === userId)
+          .forEach((credential) => { credential.state = "disabled"; });
+      });
+      throw error;
+    }
   }
 
   async disableUser(identity: Identity, userId: string) {
@@ -316,6 +342,17 @@ export class DemoStore implements BasiraStore {
       const existing = db.memberships.find((m) => m.groupId === groupId && m.studentId === studentId);
       if (existing) existing.status = "active";
       else db.memberships.push({ id: randomUUID(), groupId, studentId, status: "active", joinedAt: now() });
+    });
+  }
+
+  async removeStudentFromGroup(identity: Identity, groupId: string, studentId: string): Promise<void> {
+    await mutateDemoDatabase((db) => {
+      const group = assertFound(db.groups.find((item) => item.id === groupId));
+      assertAllowed(groupOwnedBy(identity, group));
+      const membership = assertFound(db.memberships.find((item) =>
+        item.groupId === groupId && item.studentId === studentId && item.status === "active"
+      ), "الطالب غير مسجل في هذه المجموعة");
+      membership.status = "removed";
     });
   }
 
