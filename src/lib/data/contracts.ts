@@ -52,6 +52,7 @@ export interface BasiraStore {
   createTeacher(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode>;
   createStudent(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode>;
   resetAccessCode(identity: Identity, userId: string): Promise<CreatedAccessCode>;
+  reactivateUser(identity: Identity, userId: string): Promise<CreatedAccessCode>;
   disableUser(identity: Identity, userId: string): Promise<void>;
 
   listGroups(identity: Identity): Promise<Group[]>;
@@ -59,6 +60,7 @@ export interface BasiraStore {
   createGroup(identity: Identity, input: { name: string; description?: string; ownerTeacherId?: string }): Promise<Group>;
   transferGroup(identity: Identity, groupId: string, ownerTeacherId: string): Promise<void>;
   addStudentToGroup(identity: Identity, groupId: string, studentId: string): Promise<void>;
+  removeStudentFromGroup(identity: Identity, groupId: string, studentId: string): Promise<void>;
   upsertPrivateRecord(identity: Identity, input: Omit<PrivateStudentRecord, "id" | "teacherId" | "updatedAt">): Promise<void>;
 
   createSubject(identity: Identity, input: { groupId: string; title: string; description?: string }): Promise<Subject>;
