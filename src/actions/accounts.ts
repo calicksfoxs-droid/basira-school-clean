@@ -178,6 +178,30 @@ export async function resetAccessCodeWithRevealAction(
   }
 }
 
+export async function reactivateUserWithRevealAction(
+  _previousState: ResetAccessCodeRevealState,
+  formData: FormData,
+): Promise<ResetAccessCodeRevealState> {
+  const path = returnPath(formData, "/app/admin");
+
+  try {
+    const identity = await requireRole("admin");
+    const created = await (await getStore()).reactivateUser(identity, formText(formData, "userId"));
+    revalidatePath(path);
+    return {
+      ok: true,
+      data: { code: created.code, displayName: created.user.displayName },
+      message: "تمت إعادة تفعيل الحساب وإصدار رمز دخول جديد",
+    };
+  } catch (error) {
+    console.error(error instanceof AppError ? `[${error.code}] ${error.message}` : error);
+    return {
+      ok: false,
+      error: error instanceof AppError ? error.message : "تعذر إعادة تفعيل الحساب. حاول مرة أخرى.",
+    };
+  }
+}
+
 export async function disableUserAction(formData: FormData) {
   const path = returnPath(formData, "/app");
   try {
