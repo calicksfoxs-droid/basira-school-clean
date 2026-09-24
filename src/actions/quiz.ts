@@ -7,6 +7,8 @@ import { redirect } from "next/navigation";
 import { createQuizSchema } from "@/domain/schemas";
 import { requireRole } from "@/lib/auth";
 import { getStore } from "@/lib/data";
+import { AppError } from "@/lib/data/errors";
+import { CORE1_CAPABILITIES, CORE1_DISABLED_MESSAGE } from "@/lib/release/core1-capabilities";
 import { demoUploadDir } from "@/lib/demo/demo-db";
 import { env, isDemoBackend } from "@/lib/env";
 import { handleActionError, redirectNotice } from "./helpers";
@@ -78,6 +80,7 @@ export async function gradeSubmissionAction(formData: FormData) {
 
   try {
     const identity = await requireRole("teacher");
+    if (!CORE1_CAPABILITIES.manualGrading) throw new AppError(CORE1_DISABLED_MESSAGE, "CORE1_DISABLED", 409);
     const store = await getStore();
     const details = await store.getSubmission(identity, submissionId);
     const scores: Record<string, number> = {};
