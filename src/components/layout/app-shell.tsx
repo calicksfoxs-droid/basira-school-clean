@@ -23,9 +23,7 @@ function nav(identity: Identity): NavItem[] {
   if (identity.role === "teacher") return [
     { href: "/app/teacher", label: "الرئيسية", icon: "home", mobile: true },
     { href: "/app/teacher/grades", label: "صفوفي", icon: "school", mobile: true },
-    { href: "/app/teacher/groups", label: "مجموعاتي", icon: "school" },
     { href: "/app/teacher/students", label: "طلابي", icon: "users", mobile: true },
-    { href: "/app/teacher/submissions", label: "التصحيح", icon: "grading" },
     { href: "/app/teacher/announcements", label: "الإعلانات", icon: "announcements" },
     { href: "/app/settings", label: "الإعدادات", icon: "settings", mobile: true },
   ];
