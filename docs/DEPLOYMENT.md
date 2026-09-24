@@ -73,6 +73,34 @@ Invoke-RestMethod 'https://basira-school-clean.calicksfoxs.workers.dev/api/healt
 ```
 
 The deep probe must report `backend: "supabase"` and `database: "ready"`.
+
+### Guarded Cloudflare release
+
+For an authorized production release, prefer the guarded release command:
+
+```powershell
+$env:CLOUDFLARE_API_TOKEN="<authorized token>"
+$env:CLOUDFLARE_ACCOUNT_ID="<account id>"
+$env:NEXT_PUBLIC_SUPABASE_ANON_KEY="<public/publishable key>"
+npm run release:cloudflare
+```
+
+The command refuses a dirty working tree, stamps the exact Git SHA, runs the full
+release verification including UI E2E, builds the Vinext candidate, checks that
+the required Worker secret bindings already exist without printing their values,
+records the previous deployment as a rollback target, deploys, and then requires
+`/api/health?deep=1` to report the exact deployed SHA with the Supabase backend
+and database ready.
+
+The Worker must already contain these runtime secrets:
+
+```text
+BASIRA_APP_SECRET
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+```
+
+The release command does not create or rotate those secrets.
 Free Supabase projects can pause after inactivity; resume the project before
 deploying if its project hostname no longer resolves.
 
