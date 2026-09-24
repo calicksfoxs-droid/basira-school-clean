@@ -30,13 +30,6 @@ begin
     raise exception 'Invalid rate-limit key';
   end if;
 
-  -- Serialize same-key failures even before a row exists. Row locking alone
-  -- cannot protect the first concurrent insert wave because there is no row
-  -- to lock yet.
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(p_key_hash, 0)
-  );
-
   select * into v_row
   from private.login_rate_limits
   where key_hash = p_key_hash
@@ -70,69 +63,13 @@ declare
   v_now timestamptz := clock_timestamp();
   v_row private.login_rate_limits%rowtype;
 begin
-  if p_key_hash !~ '^[0-9a-f]{64}
-
-  if not found or v_row.window_ends_at <= v_now then
-    insert into private.login_rate_limits(key_hash, failures, window_ends_at, blocked_until, updated_at)
-    values(p_key_hash, 1, v_now + interval '10 minutes', null, v_now)
-    on conflict(key_hash) do update
-      set failures = 1,
-          window_ends_at = excluded.window_ends_at,
-          blocked_until = null,
-          updated_at = excluded.updated_at
-    returning * into v_row;
-  elsif v_row.blocked_until is not null and v_row.blocked_until > v_now then
-    update private.login_rate_limits
-    set updated_at = v_now
-    where key_hash = p_key_hash
-    returning * into v_row;
-  else
-    update private.login_rate_limits
-    set failures = failures + 1,
-        blocked_until = case when failures + 1 >= 8 then v_now + interval '15 minutes' else null end,
-        updated_at = v_now
-    where key_hash = p_key_hash
-    returning * into v_row;
-  end if;
-
-  if v_row.blocked_until is not null and v_row.blocked_until > v_now then
-    return query select false, greatest(1, ceil(extract(epoch from (v_row.blocked_until - v_now)))::integer);
-  else
-    return query select true, 0;
-  end if;
-end;
-$$;
-
-create or replace function public.clear_login_failures_v1(p_key_hash text)
-returns void
-language plpgsql
-security definer
-set search_path = ''
-as $$
-begin
   if p_key_hash !~ '^[0-9a-f]{64}$' then
     raise exception 'Invalid rate-limit key';
   end if;
 
-  delete from private.login_rate_limits where key_hash = p_key_hash;
-end;
-$$;
-
-revoke all on function public.check_login_rate_limit_v1(text) from public, anon, authenticated;
-revoke all on function public.record_login_failure_v1(text) from public, anon, authenticated;
-revoke all on function public.clear_login_failures_v1(text) from public, anon, authenticated;
-
-grant execute on function public.check_login_rate_limit_v1(text) to service_role;
-grant execute on function public.record_login_failure_v1(text) to service_role;
-grant execute on function public.clear_login_failures_v1(text) to service_role;
-
-commit;
- then
-    raise exception 'Invalid rate-limit key';
-  end if;
-
-  -- The mutation RPC must own the same-key serialization itself because
-  -- check_login_rate_limit_v1() runs in a separate transaction.
+  -- check_login_rate_limit_v1() and this mutation execute in separate
+  -- transactions. The mutation therefore owns same-key serialization itself,
+  -- including the first concurrent wave before any row exists.
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(p_key_hash, 0)
   );
