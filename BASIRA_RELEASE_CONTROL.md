@@ -3,7 +3,7 @@
 Status: ACTIVE  
 Release model: Minimum Durable Product  
 Base under execution: `aaa02d4cf11652b22a0b2a2f59813ff8338ed07e`  
-Execution branch: `release/core-1.0-reset`
+Execution branch: `release/core-1.0-reset-v2`
 
 ## Release promise
 
@@ -106,12 +106,21 @@ Core 1.0 disabled:
 
 ## Current release blockers
 
-- F1: progressive locked Lesson direct-read bypass.
-- F2: Asset aperture overclaims Production (aid + image handout).
-- F3: newly created Student lacks enrollment-reference bootstrap.
-- F4: objective-only assessment not enforced server-side.
-- Release Engineering: Production schema/content parity and known migration/deployment state.
+Resolved for the frozen backend contract:
+- F1 progressive locked Lesson direct-read enforcement.
+- F2 MP4/WebM/PDF-only asset aperture.
+- F3 enrollment-reference bootstrap.
+- F4 objective-only assessment boundary.
+- shared production login limiter, including same-key first-wave concurrency.
+- Production migrations 014, 015, and 016.
+
+Remaining release gates:
 - Phase 1.7: Production Auth Admin HTTP live proof remains required; no redesign.
+- Release Engineering: exact deployed application SHA parity remains unverified because the live health endpoint currently reports `commit: "local"`.
+- Final deployed-candidate HTTP/UI Golden Path + Red Spine smoke.
+- Exact rollback target and final residue check.
+
+Backend Supported contracts are frozen for UI implementation. Until Release Candidate freeze, only reproducible P0/P1 fixes may change those contracts.
 
 ## Execution order
 
