@@ -11,8 +11,16 @@ Canonical base SHA before Phase 1.7: `658fdd7fe9b399f09f0970cb6e3a5dce56b24bac`
 Phase 1.7 PR #7 reviewed head used as execution base: `aaa02d4cf11652b22a0b2a2f59813ff8338ed07e`
 Core 1.0 execution branch: `release/core-1.0-reset-v2`
 
-Verified code head before this state-only commit:
-`ddb7fd959d03a24bc6a50df78efda0d6e88ec136`
+Frozen UI backend executable baseline:
+`8e840a067dccd09c9c442a54ee754cb78863d97b`
+
+Latest green GitHub Actions evidence for that baseline:
+- workflow run: `35998706822`
+- `verify:release`: PASS
+- Next production build: PASS
+- Vinext/Cloudflare candidate build: PASS
+- 130 tests passed; 2 live-gate tests skipped by default
+- Production deep-health probe: PASS
 
 PR #7 remains OPEN / UNMERGED. It is not approved for merge until the bounded Phase 1.7 Production Auth Admin HTTP proof passes.
 
@@ -46,8 +54,9 @@ Database deployment and application deployment remain separate operations. Routi
 - Full repository verification: PASS.
 - Cloudflare/Vinext candidate build: PASS.
 - Production health: PASS.
-- Phase 1.7 Auth Admin HTTP proof: HOLD.
-- Exact deployed application SHA parity: UNVERIFIED because Production health currently reports `commit: "local"`.
+- Phase 1.7 Auth Admin HTTP proof: HOLD — executable live-gate harness exists, but GitHub Actions has no `SUPABASE_SERVICE_ROLE_KEY`.
+- Exact deployed application SHA parity: HOLD — build provenance is now stamped correctly, but current Production still reports `commit: "local"`.
+- Cloudflare deployment metadata / rollback ID: HOLD — GitHub Actions has no Cloudflare API credentials.
 - Overall Release Candidate freeze: HOLD.
 
 The Supported backend contract shape is frozen for UI implementation. Until overall RC freeze, only reproducible P0/P1 fixes may change those contracts.
@@ -187,10 +196,12 @@ GitHub Actions on the release branch now runs with Node 22 and proves:
 - `npm run verify:release`;
 - lint;
 - typecheck;
-- 130 / 130 tests;
+- 130 normal tests PASS;
+- 2 Phase 1.7 live tests are present but skipped unless explicitly enabled with Production credentials;
 - static release verification;
 - Next production build;
 - `npm run build:vinext`;
+- generated build provenance stamp equals the checked-out Git SHA;
 - current Production deep health probe.
 
 Latest verified live Production health response:
@@ -218,23 +229,34 @@ Latest residue baseline:
 - users with duplicate current Credentials = 0;
 - prepared / cleanup_pending account-creation operations = 0.
 
-Still required before PR #7 merge / Phase 1.7 formal close:
-1. real Production Auth Admin HTTP create/get proof with pre-known UUID and expected metadata;
-2. real delete + exact absence reconciliation;
-3. one real store-level supported account creation proving exactly one Auth user/Profile/current Credential, authenticating the returned access code, then controlled cleanup;
-4. rerun residue checks afterward.
+A bounded live harness now exists at `scripts/phase1-7-live-gate.test.ts` and covers:
+1. real Production Auth Admin HTTP create/get with pre-known UUID and expected metadata;
+2. delete + exact absence reconciliation;
+3. one real `SupabaseStore.createTeacher` creation;
+4. exact Auth/Profile/current-Credential/operation verification;
+5. authentication of the returned access code through `loginWithAccessCode`;
+6. controlled test-user cleanup.
 
-The available Supabase connector does not expose these Auth Admin HTTP primitives. SQL substitution is not accepted as proof.
+On workflow run `35998706822`, the live step was skipped because `SUPABASE_SERVICE_ROLE_KEY` is not available in GitHub Actions. The available Supabase connector also does not expose Auth Admin HTTP primitives, so SQL substitution remains unacceptable.
+
+Latest post-verification residue baseline remains clean:
+- Auth without Profile = 0;
+- active Profile without current Credential = 0;
+- duplicate current Credential users = 0;
+- prepared / cleanup_pending operations = 0.
 
 ## Remaining release gates
 
 Backend contract work for UI may proceed now against the frozen Supported Surface.
 
 Overall Core 1.0 Release Candidate is still HOLD until:
-1. Phase 1.7 Production Auth Admin HTTP tests A/B/C pass;
-2. exact deployed application SHA is observable and matched to the intended candidate;
-3. the deployed candidate receives the final app-level Golden Path / Red Spine smoke where HTTP/UI behavior is required;
-4. exact rollback target is recorded;
-5. final residue checks remain clean.
+1. Phase 1.7 Production Auth Admin HTTP tests A/B/C run with an authorized service-role runtime and pass;
+2. the candidate is deployed to Cloudflare from an authorized runtime;
+3. live `/api/health?deep=1` reports the deployed candidate SHA rather than `local`;
+4. exact Cloudflare deployment/version rollback target is recorded;
+5. the deployed candidate receives the final app-level Golden Path / Red Spine smoke where HTTP/UI behavior is required;
+6. final residue checks remain clean.
+
+These remaining blockers are credential/runtime gates, not unresolved backend-contract design work. UI implementation may proceed against the frozen baseline above.
 
 No architecture review is reopened. Only a reproducible P0/P1 may alter the frozen backend contracts.

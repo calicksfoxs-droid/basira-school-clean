@@ -115,10 +115,14 @@ Resolved for the frozen backend contract:
 - Production migrations 014, 015, and 016.
 
 Remaining release gates:
-- Phase 1.7: Production Auth Admin HTTP live proof remains required; no redesign.
-- Release Engineering: exact deployed application SHA parity remains unverified because the live health endpoint currently reports `commit: "local"`.
+- Phase 1.7: the live Auth harness is implemented, but its Production A/B/C tests cannot run in GitHub because `SUPABASE_SERVICE_ROLE_KEY` is not configured there.
+- Release Engineering: build provenance is implemented and verified in CI, but Production still reports `commit: "local"` until the new candidate is deployed.
+- Cloudflare deploy/rollback metadata cannot be read from GitHub because Cloudflare API credentials are not configured there.
 - Final deployed-candidate HTTP/UI Golden Path + Red Spine smoke.
 - Exact rollback target and final residue check.
+
+UI backend baseline: `8e840a067dccd09c9c442a54ee754cb78863d97b`.
+The remaining gates are external credential/runtime gates; they do not reopen the frozen Supported backend contracts.
 
 Backend Supported contracts are frozen for UI implementation. Until Release Candidate freeze, only reproducible P0/P1 fixes may change those contracts.
 
