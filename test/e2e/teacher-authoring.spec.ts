@@ -125,8 +125,9 @@ test("Core 1.0 student creation hides deferred contact and finance fields", asyn
   await loginAsTeacher(page);
   await page.goto("/app/teacher/students");
 
-  await expect(page.getByLabel("اسم الطالب")).toBeVisible();
-  await expect(page.getByLabel("المجموعة")).toBeVisible();
+  const createStudentForm = page.locator("form").filter({ has: page.getByLabel("اسم الطالب") });
+  await expect(createStudentForm.getByLabel("اسم الطالب")).toBeVisible();
+  await expect(createStudentForm.getByLabel("المجموعة")).toBeVisible();
   await expect(page.getByLabel("رقم التواصل")).toHaveCount(0);
   await expect(page.getByLabel("المبلغ / الحالة")).toHaveCount(0);
   await expect(page.getByLabel("ملاحظة مالية خاصة")).toHaveCount(0);
