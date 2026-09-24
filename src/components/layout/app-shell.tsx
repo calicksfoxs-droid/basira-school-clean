@@ -32,7 +32,7 @@ function nav(identity: Identity): NavItem[] {
     { href: "/app/student/grades", label: "صفوفي", icon: "school", mobile: true },
     { href: "/app/student/journey", label: "رحلتي", icon: "journey", mobile: true },
     { href: "/app/student/results", label: "نتائجي", icon: "grading" },
-    { href: "/app/settings", label: "حسابي", icon: "settings", mobile: true },
+    { href: "/app/settings/enrollment-reference", label: "حسابي", icon: "settings", mobile: true },
   ];
 }
 
