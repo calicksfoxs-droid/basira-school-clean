@@ -315,6 +315,23 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     ]);
   });
 
+  it("supports first enrollment-reference bootstrap when none exists", async () => {
+    const store = new DemoLearningCoreStore();
+    const db = await readDemoDatabase();
+    db.learningEnrollmentReferences = db.learningEnrollmentReferences.filter((item) => item.studentId !== student.userId);
+    await writeDemoDatabase(db);
+
+    expect(await store.getOwnEnrollmentReference(student)).toBeUndefined();
+
+    const revealed = await store.rotateEnrollmentReference(student, student.userId);
+    expect(revealed.reference).toMatch(/^BSR-S-[A-Z2-9]{12}$/);
+    expect(await store.getOwnEnrollmentReference(student)).toEqual({
+      studentId: student.userId,
+      maskedReference: revealed.maskedReference,
+      rotatedAt: revealed.rotatedAt,
+    });
+  });
+
   it("stores only an enrollment fingerprint and links an existing student account", async () => {
     const store = new DemoLearningCoreStore();
     const revealed = await store.rotateEnrollmentReference(student, student.userId);
