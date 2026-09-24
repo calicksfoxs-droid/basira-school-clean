@@ -1,7 +1,7 @@
 # BASIRA Release State — Core 1.0
 
 Updated: 2026-09-24
-State: EXECUTION / BACKEND CONTRACTS FROZEN FOR UI
+State: EXECUTION / GREEN UI FALLBACK INTEGRATED / BACKEND CONTRACTS FROZEN
 Release readiness: HOLD
 
 ## Git
@@ -22,7 +22,16 @@ Latest green GitHub Actions evidence for that baseline:
 - 130 tests passed; 2 live-gate tests skipped by default
 - Production deep-health probe: PASS
 
-PR #7 remains OPEN / UNMERGED. It is not approved for merge until the bounded Phase 1.7 Production Auth Admin HTTP proof passes.
+Green Core 1.0 UI fallback baseline:
+`b5a98924be735c6dc546ad341a968bf852970281`
+
+UI fallback integration:
+- PR #9 merged the exact green fallback baseline into `release/core-1.0-reset-v2`.
+- release merge commit: `790e323f230da61565081acae5be689f77144513`.
+- exact fallback evidence: workflow run `36004315092` passed lint, typecheck, 130 normal tests, static verification, Next build, Desktop Chromium E2E, focused Mobile Chromium smoke, Vinext build, and Production deep-health probe.
+- the newer Astra redesign remains isolated on PR #8 and is not part of the fallback release candidate until it independently returns green.
+
+PR #7 is superseded by the current release line: its head `aaa02d4cf11652b22a0b2a2f59813ff8338ed07e` is an ancestor of the release branch. It no longer represents a separate merge gate; the remaining Phase 1.7 blocker is only the bounded live Auth Admin HTTP proof.
 
 ## Production database
 
@@ -203,6 +212,9 @@ GitHub Actions on the release branch now runs with Node 22 and proves:
 - `npm run build:vinext`;
 - generated build provenance stamp equals the checked-out Git SHA;
 - current Production deep health probe.
+
+Current integrated fallback release commit: `790e323f230da61565081acae5be689f77144513`.
+The exact UI fallback content commit `b5a98924be735c6dc546ad341a968bf852970281` is already green. The release-branch push verification for the merge commit must also be green before deployment.
 
 Latest verified live Production health response:
 - `ok: true`;
