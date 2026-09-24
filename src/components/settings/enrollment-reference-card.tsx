@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 type ReferenceMetadata = { maskedReference: string; rotatedAt: string };
 type RevealedReference = ReferenceMetadata & { reference: string };
 
-export function EnrollmentReferenceCard({ initial }: { initial: ReferenceMetadata }) {
-  const [metadata, setMetadata] = useState(initial);
+export function EnrollmentReferenceCard({ initial }: { initial?: ReferenceMetadata }) {
+  const [metadata, setMetadata] = useState<ReferenceMetadata | undefined>(initial);
   const [revealed, setRevealed] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -32,7 +32,7 @@ export function EnrollmentReferenceCard({ initial }: { initial: ReferenceMetadat
   return <section className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-5">
     <h2 className="font-heading text-lg font-bold">معرّف الانضمام</h2>
     <p className="mt-2 text-sm leading-7 text-[var(--muted)]">أرسله للمعلم ليسجلك في مجموعته. هذا ليس رمز دخول حسابك.</p>
-    <div className="mt-4 rounded-2xl bg-[var(--soft)] p-4 text-center font-mono text-lg font-bold" dir="ltr">{revealed || metadata.maskedReference}</div>
-    {revealed ? <div className="mt-4 grid gap-3"><p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">احفظه الآن؛ لن يظهر كاملًا مرة أخرى بعد إغلاق هذه الرسالة.</p><div className="flex gap-2"><Button type="button" onClick={copy} className="flex-1">{copied ? <Check className="size-4"/> : <Copy className="size-4"/>}{copied ? "تم النسخ" : "نسخ"}</Button><Button type="button" variant="secondary" onClick={() => setRevealed(undefined)}><EyeOff className="size-4"/> إغلاق</Button></div></div> : <Button type="button" variant="secondary" className="mt-4 w-full" onClick={rotate} disabled={busy}><RefreshCw className={`size-4 ${busy ? "animate-spin" : ""}`}/>{busy ? "جارٍ التدوير" : "تدوير المعرّف"}</Button>}
+    <div className="mt-4 rounded-2xl bg-[var(--soft)] p-4 text-center font-mono text-lg font-bold" dir="ltr">{revealed || metadata?.maskedReference || "لم يتم إنشاء معرّف بعد"}</div>
+    {revealed ? <div className="mt-4 grid gap-3"><p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">احفظه الآن؛ لن يظهر كاملًا مرة أخرى بعد إغلاق هذه الرسالة.</p><div className="flex gap-2"><Button type="button" onClick={copy} className="flex-1">{copied ? <Check className="size-4"/> : <Copy className="size-4"/>}{copied ? "تم النسخ" : "نسخ"}</Button><Button type="button" variant="secondary" onClick={() => setRevealed(undefined)}><EyeOff className="size-4"/> إغلاق</Button></div></div> : <Button type="button" variant="secondary" className="mt-4 w-full" onClick={rotate} disabled={busy}><RefreshCw className={`size-4 ${busy ? "animate-spin" : ""}`}/>{busy ? "جارٍ الإنشاء" : metadata ? "تدوير المعرّف" : "إنشاء معرّف الانضمام"}</Button>}
   </section>;
 }
