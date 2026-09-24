@@ -14,14 +14,14 @@ export async function loginAction(formData: FormData) {
   const clientAddress = forwarded || requestHeaders.get("x-real-ip") || "unknown";
   const publicRef = parsed.data.slice(4, 8);
   const rateKey = `${clientAddress}:${publicRef}`;
-  const rate = checkLoginRateLimit(rateKey);
+  const rate = await checkLoginRateLimit(rateKey);
   if (!rate.allowed) redirect(`/login?error=${encodeURIComponent("محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.")}`);
   const result = await loginWithAccessCode(parsed.data);
   if (!result.ok) {
-    recordLoginFailure(rateKey);
+    await recordLoginFailure(rateKey);
     redirect(`/login?error=${encodeURIComponent(result.error)}`);
   }
-  clearLoginFailures(rateKey);
+  await clearLoginFailures(rateKey);
   redirect(roleHome(result.identity.role));
 }
 
