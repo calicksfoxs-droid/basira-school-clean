@@ -28,3 +28,5 @@ jobs:
         run: npm ci
       - name: Verify release
         run: npm run verify:release
+      - name: Build Cloudflare candidate
+        run: npm run build:vinext
