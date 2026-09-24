@@ -1,6 +1,6 @@
 # BASIRA Release Control — Core 1.0
 
-Status: ACTIVE  
+Status: ACTIVE — GREEN UI FALLBACK INTEGRATED  
 Release model: Minimum Durable Product  
 Base under execution: `aaa02d4cf11652b22a0b2a2f59813ff8338ed07e`  
 Execution branch: `release/core-1.0-reset-v2`
@@ -121,8 +121,11 @@ Remaining release gates:
 - Final deployed-candidate HTTP/UI Golden Path + Red Spine smoke.
 - Exact rollback target and final residue check.
 
-UI backend baseline: `8e840a067dccd09c9c442a54ee754cb78863d97b`.
-The remaining gates are external credential/runtime gates; they do not reopen the frozen Supported backend contracts.
+Frozen backend executable baseline: `8e840a067dccd09c9c442a54ee754cb78863d97b`.
+Green UI fallback content baseline: `b5a98924be735c6dc546ad341a968bf852970281`.
+Fallback UI was integrated into `release/core-1.0-reset-v2` through PR #9; merge commit: `790e323f230da61565081acae5be689f77144513`.
+PR #8 now remains the isolated Astra redesign lane and must not replace the fallback until its own final CI/E2E/visual QA is green.
+The remaining release gates are external credential/runtime/deployment gates; they do not reopen the frozen Supported backend contracts.
 
 Backend Supported contracts are frozen for UI implementation. Until Release Candidate freeze, only reproducible P0/P1 fixes may change those contracts.
 
