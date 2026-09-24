@@ -7,7 +7,7 @@ const noStore = { "Cache-Control": "no-store, private, max-age=0" };
 export async function GET() {
   const identity = await requireRole("student");
   const metadata = await getLearningCoreStore().getOwnEnrollmentReference(identity);
-  return NextResponse.json(metadata, { headers: noStore });
+  return NextResponse.json(metadata ?? null, { headers: noStore });
 }
 
 export async function POST() {
