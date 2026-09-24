@@ -9,6 +9,7 @@ const required = [
   "src/app/app/student/page.tsx",
   "src/app/api/health/route.ts",
   "scripts/prepare-build-info.mjs",
+  "scripts/phase1-7-live-gate.test.ts",
   "src/app/api/uploads/authorize/route.ts",
   "src/app/api/uploads/finalize/route.ts",
   "src/components/files/upload-panel.tsx",

@@ -30,6 +30,20 @@ jobs:
         run: npm run verify:release
       - name: Build Cloudflare candidate
         run: npm run build:vinext
+      - name: Phase 1.7 Production Auth live gate
+        env:
+          BASIRA_BACKEND: supabase
+          BASIRA_APP_SECRET: ci-phase17-live-gate-secret-2026-not-for-production
+          NEXT_PUBLIC_SUPABASE_URL: https://fhedbrmdrgzvbtjvlgfu.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_zX1FIs9ZkRatN_k9YTnxew_6dm7TPb8
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BASIRA_PHASE17_ADMIN_ID: 68866895-1e1c-4d24-913f-3e1a18c64ff7
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Phase 1.7 live gate skipped: SUPABASE_SERVICE_ROLE_KEY is unavailable in GitHub Actions."
+            exit 0
+          fi
+          npm run test:phase1-7:live
       - name: Audit Cloudflare deployment metadata
         continue-on-error: true
         env:

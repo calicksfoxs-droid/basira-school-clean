@@ -21,7 +21,8 @@
     "build:vinext": "node scripts/prepare-build-info.mjs && vinext build",
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
-    "postinstall": "node scripts/prepare-build-info.mjs"
+    "postinstall": "node scripts/prepare-build-info.mjs",
+    "test:phase1-7:live": "RUN_PHASE17_LIVE_GATE=1 vitest run scripts/phase1-7-live-gate.test.ts --reporter=verbose"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
