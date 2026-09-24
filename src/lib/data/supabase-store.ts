@@ -807,6 +807,31 @@ export class SupabaseStore implements BasiraStore {
     }
   }
 
+  async reactivateUser(identity: Identity, userId: string): Promise<CreatedAccessCode> {
+    assertAllowed(identity.role === "admin");
+    const users = await this.listUsers(identity);
+    const target = assertFound(users.find((user) => user.id === userId));
+    assertAllowed(target.status === "disabled", "الحساب نشط بالفعل");
+
+    const created = await this.resetAccessCode(identity, userId);
+    const admin = this.admin();
+    const finalInvalidBefore = new Date(Date.now() + 1001).toISOString();
+    const { data, error } = await admin
+      .from("profiles")
+      .update({ status: "active", session_invalid_before: finalInvalidBefore })
+      .eq("id", userId)
+      .eq("status", "disabled")
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new AppError("تعذر تأكيد إعادة تفعيل الحساب", "ACCOUNT_REACTIVATION_PENDING", 503);
+
+    return {
+      user: { ...created.user, status: "active", sessionInvalidBefore: finalInvalidBefore },
+      code: created.code,
+    };
+  }
+
   async listGroups(identity: Identity): Promise<Group[]> {
     void identity;
     const client = await this.client();
