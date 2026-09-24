@@ -34,7 +34,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ n
           <CardTitle>طالب جديد</CardTitle>
           <CardDescription>يُنشأ داخل مجموعة Learning Core نشطة تملكها.</CardDescription>
           <div className="mt-5">
-            <CreateStudentForm groups={learningGroups} returnTo="/app/teacher/students" teacherId={identity.userId}/>
+            <CreateStudentForm groups={learningGroups} returnTo="/app/teacher/students"/>
           </div>
         </Card>
         <Card>
