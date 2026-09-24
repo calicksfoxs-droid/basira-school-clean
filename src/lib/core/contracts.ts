@@ -34,6 +34,7 @@ export interface LearningCoreStore {
   publishUnitLesson(identity: Identity, lessonId: string): Promise<void>;
   completeLearningLesson(identity: Identity, lessonId: string): Promise<void>;
   enrollStudentByReference(identity: Identity, input: { groupId: string; enrollmentReference: string }): Promise<{ studentId: string; displayName: string }>;
+  removeStudentFromGroup(identity: Identity, input: { groupId: string; studentId: string }): Promise<void>;
   getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference | undefined>;
   rotateEnrollmentReference(identity: Identity, studentId: string): Promise<RevealedStudentEnrollmentReference>;
   getPlatformSettings(identity: Identity): Promise<PlatformSettings>;
