@@ -1044,6 +1044,7 @@ export class SupabaseStore implements BasiraStore {
 
   async createQuiz(identity: Identity, input: { lessonId?: string; lessonPartId?: string; title: string; instructions?: string; questions: CreateQuestionInput[] }): Promise<string> {
     assertAllowed(identity.role === "teacher");
+    assertAllowed(input.questions.every((question) => question.type === "mcq" || question.type === "true_false"), "Core 1.0 يدعم أسئلة الاختيار من متعدد والصح والخطأ فقط");
     const client = await this.client();
     let parentLessonId = input.lessonId;
     if (input.lessonPartId) {
