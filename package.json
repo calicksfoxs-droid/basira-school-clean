@@ -23,7 +23,8 @@
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
     "postinstall": "node scripts/prepare-build-info.mjs",
     "test:phase1-7:live": "RUN_PHASE17_LIVE_GATE=1 vitest run scripts/phase1-7-live-gate.test.ts --reporter=verbose",
-    "verify:ui-e2e": "node scripts/verify-ui-e2e.mjs"
+    "verify:ui-e2e": "node scripts/verify-ui-e2e.mjs",
+    "verify:deployment": "node scripts/verify-deployment.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
