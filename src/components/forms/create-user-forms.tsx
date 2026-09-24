@@ -74,7 +74,7 @@ export function CreateTeacherForm({ returnTo }: { returnTo: string }) {
   </>;
 }
 
-export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }: { groups: Group[]; returnTo: string; fixedGroupId?: string; teacherId?: string }) {
+export function CreateStudentForm({ groups, returnTo, fixedGroupId, teacherId }: { groups: Array<Pick<Group, "id" | "name">>; returnTo: string; fixedGroupId?: string; teacherId?: string }) {
   const initialCreateStudentRevealState: CreateStudentRevealState = { ok: true, data: undefined as never };
   const [state, action, pending] = useActionState(createStudentWithRevealAction, initialCreateStudentRevealState);
   const [dismissedCode, setDismissedCode] = useState<string>();
