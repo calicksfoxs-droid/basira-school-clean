@@ -1,55 +1,35 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { createLessonPartSchema, createLessonSchema, createSubjectSchema } from "@/domain/schemas";
+import { createLessonPartSchema } from "@/domain/schemas";
 import { requireRole } from "@/lib/auth";
 import { getStore } from "@/lib/data";
+import { AppError } from "@/lib/data/errors";
+import { CORE1_CAPABILITIES, CORE1_DISABLED_MESSAGE } from "@/lib/release/core1-capabilities";
 import { formText, handleActionError, redirectNotice, returnPath } from "./helpers";
 
 export async function createSubjectAction(formData: FormData) {
-  const path = returnPath(formData, "/app/teacher/groups");
-  let destination = path;
-
+  const path = returnPath(formData, "/app/teacher/grades");
   try {
-    const identity = await requireRole("teacher");
-    const parsed = createSubjectSchema.parse({
-      groupId: formText(formData, "groupId"),
-      title: formText(formData, "title"),
-      description: formText(formData, "description")
-    });
-    const subject = await (await getStore()).createSubject(identity, parsed);
-    destination = `/app/teacher/subjects/${subject.id}`;
-    revalidatePath("/app/teacher");
+    await requireRole("teacher");
+    if (!CORE1_CAPABILITIES.legacyNewAuthoring) throw new AppError(CORE1_DISABLED_MESSAGE, "CORE1_DISABLED", 409);
   } catch (error) {
     handleActionError(error, path);
   }
-
-  redirectNotice(destination, "تم إنشاء المادة");
+  redirectNotice(path, CORE1_DISABLED_MESSAGE, "error");
 }
 
 export async function createLessonAction(formData: FormData) {
-  const path = returnPath(formData, "/app/teacher/groups");
-  let destination = path;
-
+  const path = returnPath(formData, "/app/teacher/grades");
   try {
-    const identity = await requireRole("teacher");
-    const parsed = createLessonSchema.parse({
-      subjectId: formText(formData, "subjectId"),
-      title: formText(formData, "title"),
-      description: formText(formData, "description"),
-      structureMode: formText(formData, "structureMode")
-    });
-    const lesson = await (await getStore()).createLesson(identity, parsed);
-    destination = `/app/teacher/lessons/${lesson.id}/edit`;
-    revalidatePath("/app/teacher");
+    await requireRole("teacher");
+    if (!CORE1_CAPABILITIES.legacyNewAuthoring) throw new AppError(CORE1_DISABLED_MESSAGE, "CORE1_DISABLED", 409);
   } catch (error) {
     handleActionError(error, path);
   }
-
-  redirectNotice(destination, "تم إنشاء الدرس كمسودة");
+  redirectNotice(path, CORE1_DISABLED_MESSAGE, "error");
 }
 
-export async function createLessonPartAction(formData: FormData) {
-  const lessonId = formText(formData, "lessonId");
+ata, "lessonId");
   const path = returnPath(formData, `/app/teacher/lessons/${lessonId}/edit`);
   try {
     const identity = await requireRole("teacher");
