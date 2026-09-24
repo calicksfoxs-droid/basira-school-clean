@@ -84,9 +84,10 @@ deploying if its project hostname no longer resolves.
 
 - Admin creates teacher.
 - Teacher creates group, student, subject and lesson.
-- Teacher uploads video/PDF and four-type quiz, then publishes.
+- Teacher uploads supported MP4/WebM video or PDF handout and creates an MCQ/True-False quiz, then publishes.
 - Student sees assigned content only and submits.
-- Correct answers remain hidden while pending.
-- Teacher grades/releases.
-- Student sees own released result.
+- A future locked Learning Core lesson is denied on direct read.
+- Objective submission auto-grades and releases immediately.
+- Correct answers are revealed only after the finalized/released submission.
+- Student sees only their own released result.
 - Transfer ownership and failed file replacement adversarial checks pass.
