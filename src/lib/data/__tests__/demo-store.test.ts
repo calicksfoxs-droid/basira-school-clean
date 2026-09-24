@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Identity } from "@/domain/models";
 import { DemoStore } from "@/lib/data/demo-store";
 import { DemoLearningCoreStore } from "@/lib/core/demo-learning-core-store";
-import { readDemoDatabase, resetDemoDatabase } from "@/lib/demo/demo-db";
+import { mutateDemoDatabase, readDemoDatabase, resetDemoDatabase } from "@/lib/demo/demo-db";
 
 const admin: Identity = { userId: "00000000-0000-4000-8000-000000000001", displayName: "مدير بصيرة", role: "admin", status: "active" };
 const teacher: Identity = { userId: "00000000-0000-4000-8000-000000000002", displayName: "أ. أحمد", role: "teacher", status: "active" };
@@ -317,9 +317,9 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
 
   it("supports first enrollment-reference bootstrap when none exists", async () => {
     const store = new DemoLearningCoreStore();
-    const db = await readDemoDatabase();
-    db.learningEnrollmentReferences = db.learningEnrollmentReferences.filter((item) => item.studentId !== student.userId);
-    await writeDemoDatabase(db);
+    await mutateDemoDatabase((db) => {
+      db.learningEnrollmentReferences = db.learningEnrollmentReferences.filter((item) => item.studentId !== student.userId);
+    });
 
     expect(await store.getOwnEnrollmentReference(student)).toBeUndefined();
 
