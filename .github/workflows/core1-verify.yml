@@ -5,6 +5,7 @@ on:
     branches:
       - release/core-1.0-reset-v2
       - ui/core-1.0
+      - ops/core1-multihost-deploy
   workflow_dispatch:
 
 permissions:
