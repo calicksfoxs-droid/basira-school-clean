@@ -1,29 +1,20 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { createGroupSchema } from "@/domain/schemas";
 import { requireRole } from "@/lib/auth";
 import { getStore } from "@/lib/data";
+import { AppError } from "@/lib/data/errors";
+import { CORE1_CAPABILITIES, CORE1_DISABLED_MESSAGE } from "@/lib/release/core1-capabilities";
 import { formText, handleActionError, redirectNotice, returnPath } from "./helpers";
 
 export async function createGroupAction(formData: FormData) {
-  const path = returnPath(formData, "/app/teacher/groups");
-  let destination = path;
-
+  const path = returnPath(formData, "/app/teacher/grades");
   try {
-    const identity = await requireRole("admin", "teacher");
-    const input = createGroupSchema.parse({
-      name: formText(formData, "name"),
-      description: formText(formData, "description"),
-      ownerTeacherId: formText(formData, "ownerTeacherId") || undefined
-    });
-    const group = await (await getStore()).createGroup(identity, input);
-    destination = `/app/${identity.role}/groups/${group.id}`;
-    revalidatePath("/app");
+    await requireRole("admin", "teacher");
+    if (!CORE1_CAPABILITIES.legacyNewAuthoring) throw new AppError(CORE1_DISABLED_MESSAGE, "CORE1_DISABLED", 409);
   } catch (error) {
     handleActionError(error, path);
   }
-
-  redirectNotice(destination, "تم إنشاء المجموعة");
+  redirectNotice(path, CORE1_DISABLED_MESSAGE, "error");
 }
 
 export async function transferGroupAction(formData: FormData) {
