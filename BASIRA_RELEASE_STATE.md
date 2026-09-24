@@ -63,7 +63,7 @@ Release-blocking findings:
 ## Execution slices
 
 ### Slice 0 — Release Aperture / Supported Surface Enforcement
-Status: IN PROGRESS.
+Status: CLOSED.
 
 Closure criteria:
 - supported/disabled capability contract exists in code, not only prose;
@@ -79,8 +79,15 @@ Hard bounds:
 - no changes to Assignments/Gradebook/Analytics;
 - no Phase 1.7 recovery redesign.
 
+Slice 0 closure:
+- code capability aperture added;
+- Teacher navigation/home routed to Learning Core;
+- Legacy Group/Subject/Lesson creation rejected server-side;
+- manual grading routes/action disabled;
+- no stored legacy data changed.
+
 ### Slice 1 — F1 locked Lesson read
-Status: QUEUED.
+Status: IN PROGRESS.
 
 Closure criteria:
 - Learning Core future/locked Lesson cannot be read by direct Lesson URL;
