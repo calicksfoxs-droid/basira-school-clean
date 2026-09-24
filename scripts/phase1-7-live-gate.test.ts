@@ -25,19 +25,28 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const adminActorId = process.env.BASIRA_PHASE17_ADMIN_ID;
 
+function createLiveAdminClient() {
+  if (!url || !serviceRoleKey) {
+    throw new Error("Phase 1.7 live gate Supabase admin environment is incomplete");
+  }
+  return createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+type LiveAdminClient = ReturnType<typeof createLiveAdminClient>;
+
 function requireLiveEnv() {
   if (!url || !anonKey || !serviceRoleKey || !adminActorId) {
     throw new Error("Phase 1.7 live gate environment is incomplete");
   }
   return {
-    admin: createClient(url, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    }),
+    admin: createLiveAdminClient(),
     adminActorId,
   };
 }
 
-async function deleteTestAccount(admin: ReturnType<typeof createClient>, userId: string) {
+async function deleteTestAccount(admin: LiveAdminClient, userId: string) {
   await admin.from("access_credentials").delete().eq("auth_user_id", userId);
   await admin.from("profiles").delete().eq("id", userId);
   const result = await admin.auth.admin.deleteUser(userId);
