@@ -185,6 +185,17 @@ export async function enrollExistingStudentAction(formData: FormData): Promise<A
   } catch (error) { return failure(error); }
 }
 
+export async function removeStudentMembershipAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const identity = await requireRole("admin", "teacher");
+    const groupId = idSchema.parse(text(formData, "groupId"));
+    const studentId = idSchema.parse(text(formData, "studentId"));
+    await getLearningCoreStore().removeStudentFromGroup(identity, { groupId, studentId });
+    revalidatePath("/app");
+    return { ok: true, data: undefined, message: "تمت إزالة الطالب من المجموعة" };
+  } catch (error) { return failure(error); }
+}
+
 export async function rotateMyEnrollmentReferenceAction(): Promise<ActionResult<RevealedStudentEnrollmentReference>> {
   try {
     const identity = await requireRole("student");
@@ -226,6 +237,7 @@ export async function createLearningUnitFormAction(formData: FormData): Promise<
 export async function createLearningLessonFormAction(formData: FormData): Promise<void> { await createLearningLessonAction(formData); }
 export async function removeLearningLessonFormAction(formData: FormData): Promise<void> { await removeLearningLessonAction(formData); }
 export async function enrollExistingStudentFormAction(formData: FormData): Promise<void> { await enrollExistingStudentAction(formData); }
+export async function removeStudentMembershipFormAction(formData: FormData): Promise<void> { await removeStudentMembershipAction(formData); }
 export async function publishLearningSubjectFormAction(formData: FormData): Promise<void> { await publishLearningSubjectAction(formData); }
 export async function publishLearningUnitFormAction(formData: FormData): Promise<void> { await publishLearningUnitAction(formData); }
 export async function publishLearningLessonFormAction(formData: FormData): Promise<void> { await publishLearningLessonAction(formData); }
