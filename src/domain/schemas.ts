@@ -50,7 +50,7 @@ export const announcementSchema = z.object({
 });
 
 export const quizQuestionSchema = z.object({
-  type: z.enum(["mcq", "true_false", "essay_text", "essay_file"]),
+  type: z.enum(["mcq", "true_false"]),
   prompt: z.string().trim().min(2).max(500),
   points: z.coerce.number().positive().max(100),
   options: z.array(z.object({ text: z.string().trim().min(1).max(200), isCorrect: z.boolean() })).optional(),
