@@ -19,6 +19,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { requireIdentity, requireRole } from "@/lib/auth";
 import { AppError } from "@/lib/data/errors";
 import { getLearningCoreStore } from "@/lib/core";
+import { getStore } from "@/lib/data";
 import type { RevealedStudentEnrollmentReference } from "@/domain/core-models";
 
 function text(formData: FormData, key: string) {
@@ -185,6 +186,17 @@ export async function enrollExistingStudentAction(formData: FormData): Promise<A
   } catch (error) { return failure(error); }
 }
 
+export async function removeLearningStudentAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const identity = await requireRole("admin", "teacher");
+    const groupId = idSchema.parse(text(formData, "groupId"));
+    const studentId = idSchema.parse(text(formData, "studentId"));
+    await (await getStore()).removeStudentFromGroup(identity, groupId, studentId);
+    revalidatePath("/app");
+    return { ok: true, data: undefined, message: "تمت إزالة الطالب من المجموعة" };
+  } catch (error) { return failure(error); }
+}
+
 export async function rotateMyEnrollmentReferenceAction(): Promise<ActionResult<RevealedStudentEnrollmentReference>> {
   try {
     const identity = await requireRole("student");
@@ -232,3 +244,5 @@ export async function publishLearningLessonFormAction(formData: FormData): Promi
 export async function completeLearningLessonFormAction(formData: FormData): Promise<void> { await completeLearningLessonAction(formData); }
 export async function updatePlatformSettingsFormAction(formData: FormData): Promise<void> { await updatePlatformSettingsAction(formData); }
 export async function updateUserPreferencesFormAction(formData: FormData): Promise<void> { await updateUserPreferencesAction(formData); }
+
+export async function removeLearningStudentFormAction(formData: FormData): Promise<void> { await removeLearningStudentAction(formData); }
