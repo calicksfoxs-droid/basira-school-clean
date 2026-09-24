@@ -1,7 +1,7 @@
 "use strict";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { disableUserAction, resetAccessCodeAction } from "@/actions/accounts";
+import { disableUserAction, reactivateUserAction, resetAccessCodeAction } from "@/actions/accounts";
 import { requireRole } from "@/lib/auth";
 import { getStore } from "@/lib/data";
 import { setAccessCodeFlash } from "@/lib/flash";
@@ -17,10 +17,19 @@ const admin = { role: "admin", userId: "admin-id", displayName: "Admin", status:
 const mockStore = {
   disableUser: vi.fn(),
   resetAccessCode: vi.fn(),
+  reactivateUser: vi.fn(),
+  listUsers: vi.fn(),
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockStore.listUsers.mockResolvedValue([{
+    id: "student-id",
+    displayName: "Student",
+    role: "student",
+    status: "active",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  }]);
   vi.mocked(getStore).mockResolvedValue(mockStore as never);
   vi.mocked(redirect).mockImplementation((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
@@ -64,6 +73,34 @@ describe("account credential actions", () => {
     expect(getStore).not.toHaveBeenCalled();
     expect(mockStore.resetAccessCode).not.toHaveBeenCalled();
     expect(setAccessCodeFlash).not.toHaveBeenCalled();
+  });
+
+  it("rejects normal reset for a disabled account", async () => {
+    vi.mocked(requireRole).mockResolvedValueOnce(admin);
+    mockStore.listUsers.mockResolvedValueOnce([{
+      id: "student-id",
+      displayName: "Student",
+      role: "student",
+      status: "disabled",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }]);
+
+    await expect(resetAccessCodeAction(form())).rejects.toThrow("NEXT_REDIRECT:");
+
+    expect(mockStore.resetAccessCode).not.toHaveBeenCalled();
+  });
+
+  it("reactivates a disabled account with a fresh one-time code", async () => {
+    vi.mocked(requireRole).mockResolvedValueOnce(admin);
+    mockStore.reactivateUser.mockResolvedValueOnce({
+      code: "BSR-ABCD-87654321",
+      user: { displayName: "Student" },
+    });
+
+    await expect(reactivateUserAction(form())).rejects.toThrow("NEXT_REDIRECT:/app/access-code");
+
+    expect(mockStore.reactivateUser).toHaveBeenCalledWith(admin, "student-id");
+    expect(setAccessCodeFlash).toHaveBeenCalledWith("BSR-ABCD-87654321", "Student");
   });
 
   it("allows an admin to reset a code and stores only an encrypted flash", async () => {
