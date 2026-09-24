@@ -16,13 +16,14 @@
     "seed:supabase": "node --env-file=.env.local scripts/seed-supabase.mjs",
     "seed:supabase:reset-admin": "node --env-file=.env.local scripts/seed-supabase.mjs --reset-admin",
     "verify:static": "node scripts/verify-release.mjs",
-    "verify:release": "npm run lint && npm run typecheck && npm run test && npm run verify:static && npm run build",
+    "verify:release": "npm run lint && npm run typecheck && npm run test && npm run verify:static && npm run build && npm run verify:ui-e2e",
     "dev:vinext": "vinext dev --port 3001",
     "build:vinext": "node scripts/prepare-build-info.mjs && vinext build",
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
     "postinstall": "node scripts/prepare-build-info.mjs",
-    "test:phase1-7:live": "RUN_PHASE17_LIVE_GATE=1 vitest run scripts/phase1-7-live-gate.test.ts --reporter=verbose"
+    "test:phase1-7:live": "RUN_PHASE17_LIVE_GATE=1 vitest run scripts/phase1-7-live-gate.test.ts --reporter=verbose",
+    "verify:ui-e2e": "node scripts/verify-ui-e2e.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
