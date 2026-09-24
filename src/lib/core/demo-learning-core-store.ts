@@ -360,12 +360,14 @@ export class DemoLearningCoreStore implements LearningCoreStore {
     });
   }
 
-  async getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference> {
+  async getOwnEnrollmentReference(identity: Identity): Promise<StudentEnrollmentReference | undefined> {
     assertAllowed(identity.role === "student");
     const database = await readDemoDatabase();
-    const reference = assertFound(database.learningEnrollmentReferences.find((candidate) =>
-      candidate.studentId === identity.userId && !candidate.revokedAt));
-    return { studentId: reference.studentId, maskedReference: reference.maskedReference, rotatedAt: reference.rotatedAt };
+    const reference = database.learningEnrollmentReferences.find((candidate) =>
+      candidate.studentId === identity.userId && !candidate.revokedAt);
+    return reference
+      ? { studentId: reference.studentId, maskedReference: reference.maskedReference, rotatedAt: reference.rotatedAt }
+      : undefined;
   }
 
   async rotateEnrollmentReference(identity: Identity, studentId: string): Promise<RevealedStudentEnrollmentReference> {
