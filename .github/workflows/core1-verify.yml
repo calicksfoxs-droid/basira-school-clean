@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Use Node.js 20
+      - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -30,3 +30,8 @@ jobs:
         run: npm run verify:release
       - name: Build Cloudflare candidate
         run: npm run build:vinext
+      - name: Probe current Production health
+        run: |
+          body="$(curl --fail --silent --show-error --max-time 20 'https://basira-school-clean.calicksfoxs.workers.dev/api/health?deep=1')"
+          echo "$body"
+          node -e 'const x=JSON.parse(process.argv[1]); if(x.ok!==true||x.backend!=="supabase"||x.database!=="ready") process.exit(1)' "$body"
