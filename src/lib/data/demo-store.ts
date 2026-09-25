@@ -121,7 +121,22 @@ export class DemoStore implements BasiraStore {
 
   async createTeacher(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode> {
     assertAllowed(identity.role === "admin");
-    return this.createProvisionedAccount(identity, "teacher", input);
+    const created = await this.createProvisionedAccount(identity, "teacher", input);
+    await mutateDemoDatabase((db) => {
+      if (db.curriculumGrades.some((grade) => grade.teacherId === created.user.id && grade.status === "active")) return;
+      const timestamp = now();
+      db.curriculumGrades.push({
+        id: randomUUID(),
+        teacherId: created.user.id,
+        title: "صف غير مصنف",
+        description: "مساحة افتراضية للبدء. يمكنك تعديلها أو إضافة صفوف أخرى.",
+        displayOrder: 1,
+        status: "active",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+    });
+    return created;
   }
 
   async createStudent(identity: Identity, input: CreateUserInput): Promise<CreatedAccessCode> {
