@@ -30,6 +30,8 @@ if (config?.vars?.NEXT_PUBLIC_SUPABASE_URL !== "https://fhedbrmdrgzvbtjvlgfu.sup
 }
 if (config?.vars?.VIDEO_STORAGE_PROVIDER !== "r2") failures.push("VIDEO_STORAGE_PROVIDER is not r2");
 if (config?.vars?.R2_BUCKET_NAME !== "basira-videos") failures.push("R2_BUCKET_NAME mismatch");
+if (config?.vars?.VIDEO_STORAGE_PROVIDER !== "r2") failures.push("VIDEO_STORAGE_PROVIDER is not r2");
+if (config?.vars?.R2_BUCKET_NAME !== "basira-videos") failures.push("R2_BUCKET_NAME mismatch");
 
 const required = new Set(config?.secrets?.required ?? []);
 for (const secret of expectedSecrets) {
