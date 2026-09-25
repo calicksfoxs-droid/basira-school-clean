@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useActionState, type ReactNode } from "react";
 import { notify } from "./toast";
 import type { ActionResult } from "@/lib/action-result";
@@ -15,10 +16,12 @@ export function ActionForm({
   children: ReactNode;
   className?: string;
 }) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState(
     async (_previous: ActionResult<unknown>, formData: FormData) => {
       const result = await action(formData);
       notify(result.ok ? result.message || "تم الحفظ بنجاح" : result.error, !result.ok);
+      if (result.ok) router.refresh();
       return result;
     },
     { ok: true, data: undefined } as ActionResult<unknown>,

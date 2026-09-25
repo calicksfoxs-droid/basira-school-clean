@@ -1,7 +1,7 @@
 "use client";
 
 import { ImageIcon, Megaphone, Plus, UserPlus, Users, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createLearningGroupAction,
   enrollExistingStudentAction,
@@ -25,8 +25,10 @@ const panelCopy: Record<Panel, { title: string; description: string }> = {
 export function SubjectAuthoringToolbar({ subject, groups }: { subject: LearningSubject; groups: SubjectGroup[] }) {
   const [panel, setPanel] = useState<Panel | null>(null);
 
+  const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (!panel) return;
+    dialog.current?.showModal();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setPanel(null); };
@@ -38,15 +40,15 @@ export function SubjectAuthoringToolbar({ subject, groups }: { subject: Learning
     <section className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm" aria-label="أدوات المادة">
       <div className="hidden px-2 sm:block"><strong className="block text-sm">أدوات المادة</strong><small className="text-[var(--muted)]">أضف المحتوى، ثم نظّم الوصول.</small></div>
       <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-        <button onClick={() => setPanel("group")} className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white transition hover:brightness-95"><Users className="size-4"/> مجموعة جديدة</button>
+        <button onClick={() => setPanel("group")} className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--primary)] px-4 text-sm font-bold text-[var(--on-primary)] transition hover:brightness-95"><Users className="size-4"/> مجموعة جديدة</button>
         <button onClick={() => setPanel("student")} className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-bold text-[var(--muted)] transition hover:bg-[var(--soft)] hover:text-[var(--text)]"><UserPlus className="size-4"/> تسجيل طالب</button>
         <button onClick={() => setPanel("appearance")} className="focus-ring grid size-11 place-items-center rounded-xl text-[var(--muted)] transition hover:bg-[var(--soft)] hover:text-[var(--text)]" aria-label="تخصيص المظهر" title="الغلاف وإعلان المادة"><ImageIcon className="size-5"/></button>
       </div>
     </section>
 
-    {panel && <div className="fixed inset-0 z-[80]" role="presentation">
-      <button className="absolute inset-0 bg-[#0a1020]/65 backdrop-blur-[2px]" onClick={() => setPanel(null)} aria-label="إغلاق اللوحة"/>
-      <aside role="dialog" aria-modal="true" aria-labelledby="subject-panel-title" className="absolute inset-y-0 left-0 w-[min(94vw,500px)] overflow-y-auto border-r border-[var(--border)] bg-[var(--canvas)] shadow-2xl" dir="rtl">
+    {panel && <dialog ref={dialog} onCancel={() => setPanel(null)} aria-labelledby="subject-panel-title" className="authoring-dialog">
+
+      <div className="absolute inset-y-0 left-0 w-[min(94vw,500px)] overflow-y-auto border-r border-[var(--border)] bg-[var(--canvas)] shadow-2xl" dir="rtl">
         <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--canvas)]/95 p-5 backdrop-blur">
           <div><h2 id="subject-panel-title" className="font-heading text-xl font-bold">{panelCopy[panel].title}</h2><p className="mt-1 text-sm leading-6 text-[var(--muted)]">{panelCopy[panel].description}</p></div>
           <button onClick={() => setPanel(null)} className="focus-ring grid size-10 shrink-0 place-items-center rounded-xl border border-[var(--border)] bg-[var(--surface)]" aria-label="إغلاق اللوحة"><X className="size-5"/></button>
@@ -64,7 +66,7 @@ export function SubjectAuthoringToolbar({ subject, groups }: { subject: Learning
             </details>
           </div>}
         </div>
-      </aside>
-    </div>}
+      </div>
+    </dialog>}
   </>;
 }

@@ -32,8 +32,12 @@ export default async function Page({ params, searchParams }: { params: Promise<{
             </label>
           )}</div>}
           {question.type === "true_false" && <div className="grid grid-cols-2 gap-3">
-            <label className="rounded-xl border border-[var(--border)] p-4"><input type="radio" name={`question_${question.id}`} value="true" required/> صح</label>
-            <label className="rounded-xl border border-[var(--border)] p-4"><input type="radio" name={`question_${question.id}`} value="false" required/> خطأ</label>
+            {[{ value: "true", label: "صح" }, { value: "false", label: "خطأ" }].map((choice) =>
+              <label key={choice.value} className="focus-within:ring-2 focus-within:ring-[var(--accent)] flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] p-4">
+                <input type="radio" name={`question_${question.id}`} value={choice.value} required={question.required}/>
+                <span>{choice.label}</span>
+              </label>
+            )}
           </div>}
         </div>
       </Card>)}

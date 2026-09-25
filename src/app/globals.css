@@ -144,3 +144,20 @@ button, input, textarea, select { font: inherit; }
 @media(min-width:1024px) { .toast-region { bottom: 28px; } }
 @media(max-width:640px) { .dashboard-heading h1 { font-size: 1.5rem; line-height: 1.8; } .metric-card { min-height: 94px; padding: 16px; } }
 @media(prefers-reduced-motion:reduce) { .confirmation-dialog[open] { animation: none; } }
+
+.authoring-dialog { position: fixed; inset: 0; margin: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; padding: 0; border: 0; background: transparent; color: var(--text); }
+.authoring-dialog::backdrop { background: #0a1020a6; backdrop-filter: blur(3px); }
+.authoring-dialog > div { animation: soft-enter 180ms ease-out; }
+.journey-dialog { position: relative; width: min(94vw, 650px); }
+.journey-progress { appearance: none; border: 0; border-radius: 20px; overflow: hidden; background: var(--soft); accent-color: var(--accent); }
+.journey-progress::-webkit-progress-bar { background: var(--soft); }
+.journey-progress::-webkit-progress-value { background: var(--accent); border-radius: 20px; }
+.journey-progress::-moz-progress-bar { background: var(--accent); }
+
+.grade-card { border-top: 4px solid var(--accent); background-image: radial-gradient(ellipse at 0 0, color-mix(in srgb, var(--brand) 8%, transparent), transparent 70%); }
+tbody tr:hover { background: var(--soft); }
+
+/* Keep the quiz submission action reachable above mobile navigation. */
+@media (max-width: 1023px) {
+  .app-shell main .sticky.bottom-4 { bottom: calc(86px + env(safe-area-inset-bottom)); }
+}
