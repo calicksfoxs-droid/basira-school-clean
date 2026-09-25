@@ -111,6 +111,7 @@ for (let attempt = 0; attempt < 12; attempt += 1) {
       body?.ok === true &&
       body?.backend === "supabase" &&
       body?.database === "ready" &&
+      body?.videoStorage === "r2" &&
       String(body?.commit ?? "").toLowerCase() === expectedShort
     ) {
       health = body;
@@ -138,6 +139,7 @@ console.log(JSON.stringify({
   commit: health.commit,
   backend: health.backend,
   database: health.database,
+  videoStorage: health.videoStorage,
   deploymentId,
   rollbackId,
 }, null, 2));
