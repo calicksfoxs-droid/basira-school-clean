@@ -1,7 +1,7 @@
 import { rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth";
+import { getIdentity } from "@/lib/auth";
 import { getStore } from "@/lib/data";
 import { demoUploadDir } from "@/lib/demo/demo-db";
 import { isDemoBackend } from "@/lib/env";
@@ -15,7 +15,9 @@ function bucketFor(kind: "video" | "handout") {
 export async function POST(request: Request) {
   let cleanup: (() => Promise<unknown>) | undefined;
   try {
-    const identity = await requireRole("teacher");
+    const identity = await getIdentity();
+    if (!identity) return NextResponse.json({ error: "انتهت الجلسة. سجّل الدخول مرة أخرى." }, { status: 401 });
+    if (identity.role !== "teacher") return NextResponse.json({ error: "غير مسموح" }, { status: 403 });
     const { token } = await request.json() as { token?: string };
     const payload = token ? verifyUploadToken(token) : null;
     if (!payload || payload.userId !== identity.userId || !payload.lessonId || payload.kind === "submission") {
