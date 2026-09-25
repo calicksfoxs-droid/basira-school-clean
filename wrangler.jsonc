@@ -10,9 +10,16 @@
     "BASIRA_BACKEND": "supabase",
     "NEXT_PUBLIC_APP_URL": "https://basira-school-clean.calicksfoxs.workers.dev",
     "NEXT_PUBLIC_SUPABASE_URL": "https://fhedbrmdrgzvbtjvlgfu.supabase.co",
-    "MAX_VIDEO_UPLOAD_MB": "250",
+    "MAX_VIDEO_UPLOAD_MB": "50",
     "MAX_HANDOUT_UPLOAD_MB": "25",
     "MAX_SUBMISSION_UPLOAD_MB": "20"
+  },
+  "secrets": {
+    "required": [
+      "BASIRA_APP_SECRET",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY"
+    ]
   },
   "assets": {
     "directory": "dist/client",
