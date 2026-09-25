@@ -35,7 +35,6 @@ function userFrom(row: Record<string, unknown>): UserRecord {
     displayName: String(row.display_name),
     role: mapRole(String(row.role)),
     status: String(row.status) as "active" | "disabled",
-    syntheticEmail: row.synthetic_email ? String(row.synthetic_email) : undefined,
     createdBy: row.created_by ? String(row.created_by) : undefined,
     createdAt: String(row.created_at),
   };

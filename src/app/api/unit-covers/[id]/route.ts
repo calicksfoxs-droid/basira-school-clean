@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { requireIdentity, requireRole } from "@/lib/auth";
+import { getIdentity } from "@/lib/auth";
 import { getLearningCoreStore } from "@/lib/core";
 import { demoUploadDir, mutateDemoDatabase, readDemoDatabase } from "@/lib/demo/demo-db";
 import { isDemoBackend } from "@/lib/env";
@@ -21,7 +21,9 @@ async function unitRow(unitId: string) {
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const identity = await requireRole("teacher");
+    const identity = await getIdentity();
+    if (!identity) return NextResponse.json({ error: "انتهت الجلسة. سجّل الدخول مرة أخرى." }, { status: 401 });
+    if (identity.role !== "teacher") return NextResponse.json({ error: "غير مسموح" }, { status: 403 });
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File) || !TYPES.has(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024) {
@@ -61,7 +63,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const identity = await requireIdentity();
+    const identity = await getIdentity();
+    if (!identity) return new NextResponse(null, { status: 401 });
     if (isDemoBackend) {
       const database = await readDemoDatabase();
       const unit = database.learningUnits.find((candidate) => candidate.id === id);

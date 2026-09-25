@@ -12,6 +12,9 @@ vi.mock("@/lib/auth");
 vi.mock("@/lib/data");
 vi.mock("next/navigation", () => ({
   redirect: vi.fn(() => { throw new Error("REDIRECT"); }),
+  unstable_rethrow: vi.fn((error: unknown) => {
+    if (error instanceof Error && error.message === "REDIRECT") throw error;
+  }),
 }));
 vi.mock("next/cache");
 

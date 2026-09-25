@@ -178,6 +178,20 @@ export class DemoLearningCoreStore implements LearningCoreStore {
     });
   }
 
+  async updateSubjectMetadata(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<void> {
+    await mutateDemoDatabase((database) => {
+      const subject = ownSubject(database, identity, input.subjectId);
+      subject.title = input.title.trim();
+      subject.description = input.description?.trim() || undefined;
+      subject.updatedAt = now();
+      const legacy = database.subjects.find((candidate) => candidate.id === subject.id);
+      if (legacy) {
+        legacy.title = subject.title;
+        legacy.description = subject.description;
+      }
+    });
+  }
+
   async updateSubjectBanner(identity: Identity, input: { subjectId: string; title?: string; body?: string; ctaLabel?: string; ctaPath?: string }): Promise<void> {
     await mutateDemoDatabase((database) => {
       const subject = ownSubject(database, identity, input.subjectId);

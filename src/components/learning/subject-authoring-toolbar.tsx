@@ -6,6 +6,7 @@ import {
   createLearningGroupAction,
   enrollExistingStudentAction,
   updateLearningSubjectBannerAction,
+  updateLearningSubjectMetadataAction,
 } from "@/actions/learning-core";
 import { SubjectCoverPicker } from "@/components/learning/subject-cover-picker";
 import { ActionForm } from "@/components/ui/action-form";
@@ -57,6 +58,15 @@ export function SubjectAuthoringToolbar({ subject, groups }: { subject: Learning
           {panel === "student" && (groups.length ? <ActionForm action={enrollExistingStudentAction} className="grid gap-4"><Field label="المجموعة"><Select name="groupId" required autoFocus>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</Select></Field><Field label="معرّف الانضمام"><Input name="enrollmentReference" required dir="ltr" placeholder="BSR-S-XXXXXXXXXXXX"/></Field><p className="text-xs leading-6 text-[var(--muted)]">استخدم معرّف الانضمام الخاص بالطالب، وليس رمز دخوله.</p><Button><UserPlus className="size-4"/> إضافة الطالب للمجموعة</Button></ActionForm> : <div className="grid gap-4"><EmptyState title="أنشئ مجموعة أولًا" description="لا يمكن تسجيل طالب في المادة قبل وجود مجموعة."/><Button onClick={() => setPanel("group")} variant="secondary">إنشاء مجموعة الآن</Button></div>)}
 
           {panel === "appearance" && <div className="grid gap-6">
+            <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <div className="mb-3"><h3 className="font-heading font-bold">بيانات المادة</h3><p className="mt-1 text-xs leading-6 text-[var(--muted)]">غيّر الاسم والوصف الحقيقيين للمادة.</p></div>
+              <ActionForm action={updateLearningSubjectMetadataAction} className="grid gap-4">
+                <input type="hidden" name="subjectId" value={subject.id}/>
+                <Field label="اسم المادة"><Input name="title" defaultValue={subject.title} required/></Field>
+                <Field label="وصف المادة"><Textarea name="description" defaultValue={subject.description}/></Field>
+                <Button>حفظ بيانات المادة</Button>
+              </ActionForm>
+            </section>
             <section><div className="mb-3 flex items-center gap-2"><ImageIcon className="size-5 text-[var(--brand)]"/><h3 className="font-heading font-bold">غلاف المادة</h3></div><SubjectCoverPicker subject={subject}/></section>
             <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl font-bold"><span className="inline-flex items-center gap-2"><Megaphone className="size-4 text-[var(--brand)]"/> نص واجهة المادة</span><Plus className="size-4 transition group-open:rotate-45"/></summary>

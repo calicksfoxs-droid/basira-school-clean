@@ -7,6 +7,7 @@ on:
       - release/final-client-demo-20260925
       - ui/core-1.0
       - ui/stitch-basira-final
+      - fix/teacher-workspace-provisioning
   workflow_dispatch:
 
 permissions:

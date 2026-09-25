@@ -3,7 +3,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { createQuizSchema } from "@/domain/schemas";
 import { requireRole } from "@/lib/auth";
 import { getStore } from "@/lib/data";
@@ -21,6 +21,7 @@ export async function createQuizAction(payload: unknown) {
     revalidatePath("/app/teacher");
     return { ok: true as const, quizId };
   } catch (error) {
+    unstable_rethrow(error);
     return { ok: false as const, error: error instanceof Error ? error.message : "تعذر إنشاء الاختبار" };
   }
 }

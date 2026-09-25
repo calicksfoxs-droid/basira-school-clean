@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth";
+import { getIdentity } from "@/lib/auth";
 import { env, isDemoBackend } from "@/lib/env";
 import { getStore } from "@/lib/data";
 import { createUploadToken } from "@/lib/upload-token";
@@ -8,7 +8,9 @@ import { createUploadToken } from "@/lib/upload-token";
 const allowedVideo = new Set(["video/mp4", "video/webm"]);
 export async function POST(request: Request) {
   try {
-    const identity = await requireRole("teacher");
+    const identity = await getIdentity();
+    if (!identity) return NextResponse.json({ error: "انتهت الجلسة. سجّل الدخول مرة أخرى." }, { status: 401 });
+    if (identity.role !== "teacher") return NextResponse.json({ error: "غير مسموح" }, { status: 403 });
     const body = await request.json() as { lessonId?: string; lessonPartId?: string; kind?: "video" | "handout" | "aid"; fileName?: string; mimeType?: string; sizeBytes?: number; title?: string };
     if (!body.lessonId || !body.kind || !body.fileName || !body.mimeType || !body.sizeBytes) return NextResponse.json({ error: "بيانات الرفع ناقصة" }, { status: 400 });
     if (body.kind !== "video" && body.kind !== "handout") return NextResponse.json({ error: "نوع الملف غير مدعوم في Core 1.0" }, { status: 400 });

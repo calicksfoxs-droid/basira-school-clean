@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { AppError } from "@/lib/data/errors";
 
 export function formText(formData: FormData, name: string) {
@@ -18,6 +18,7 @@ export function redirectNotice(path: string, message: string, type: "notice" | "
 }
 
 export function handleActionError(error: unknown, path: string): never {
+  unstable_rethrow(error);
   console.error(error instanceof AppError ? `[${error.code}] ${error.message}` : error);
   const message = error instanceof AppError ? error.message : "حدث خطأ غير متوقع. حاول مرة أخرى.";
   redirectNotice(path, message, "error");

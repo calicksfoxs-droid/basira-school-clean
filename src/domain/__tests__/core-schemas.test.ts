@@ -3,11 +3,18 @@ import {
   createLearningSubjectSchema,
   enrollStudentSchema,
   updateSubjectBannerSchema,
+  updateSubjectMetadataSchema,
   updateSubjectCoverSchema,
   userPreferencesSchema,
 } from "@/domain/core-schemas";
 
 describe("Basira core schemas", () => {
+  it("validates real subject metadata edits", () => {
+    const subjectId = "10000000-0000-4000-8000-000000000001";
+    expect(updateSubjectMetadataSchema.safeParse({ subjectId, title: "الكيمياء", description: "وصف المادة" }).success).toBe(true);
+    expect(updateSubjectMetadataSchema.safeParse({ subjectId, title: "x" }).success).toBe(false);
+  });
+
   it("normalizes optional subject text", () => {
     const gradeId = "10000000-0000-4000-8000-000000000001";
     expect(createLearningSubjectSchema.parse({ gradeId, title: "  الفيزياء  ", description: "" })).toEqual({ gradeId, title: "الفيزياء", description: undefined });

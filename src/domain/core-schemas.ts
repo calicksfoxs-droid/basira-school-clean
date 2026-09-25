@@ -10,6 +10,12 @@ export const createLearningSubjectSchema = z.object({
   description: optionalText(500),
 });
 
+export const updateSubjectMetadataSchema = z.object({
+  subjectId: z.string().uuid(),
+  title: z.string().trim().min(2).max(120),
+  description: optionalText(500),
+});
+
 export const createCurriculumGradeSchema = z.object({
   title: z.string().trim().min(2).max(80),
   description: optionalText(300),

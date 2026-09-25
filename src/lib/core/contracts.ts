@@ -23,6 +23,7 @@ export interface LearningCoreStore {
   listLearningSubjects(identity: Identity): Promise<LearningSubject[]>;
   getLearningSubject(identity: Identity, subjectId: string): Promise<LearningSubjectDetails>;
   createLearningSubject(identity: Identity, input: { gradeId: string; title: string; description?: string }): Promise<LearningSubject>;
+  updateSubjectMetadata(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<void>;
   updateSubjectBanner(identity: Identity, input: { subjectId: string; title?: string; body?: string; ctaLabel?: string; ctaPath?: string }): Promise<void>;
   updateSubjectCover(identity: Identity, input: { subjectId: string; coverKey: SubjectCoverKey }): Promise<void>;
   createSubjectGroup(identity: Identity, input: { subjectId: string; name: string; description?: string }): Promise<SubjectGroup>;

@@ -489,6 +489,9 @@ describe.sequential("DemoStore role, grading, and replacement invariants", () =>
     expect(db.credentials.filter((credential) =>
       credential.userId === requestId && credential.state !== "disabled"
     )).toHaveLength(1);
+    expect(db.curriculumGrades.filter((grade) =>
+      grade.teacherId === requestId && grade.status === "active"
+    )).toHaveLength(1);
   });
 
   it("requires a Group for Admin Student creation and leaves no partial user on rejection", async () => {

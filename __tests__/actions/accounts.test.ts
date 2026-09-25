@@ -11,7 +11,12 @@ vi.mock("@/lib/auth", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/data", () => ({ getStore: vi.fn() }));
 vi.mock("@/lib/flash", () => ({ setAccessCodeFlash: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(),
+  unstable_rethrow: vi.fn((error: unknown) => {
+    if (error instanceof Error && error.message.startsWith("NEXT_REDIRECT:")) throw error;
+  }),
+}));
 
 const admin = { role: "admin", userId: "admin-id", displayName: "Admin", status: "active" } as const;
 const mockStore = {

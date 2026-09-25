@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { z, ZodError } from "zod";
 import {
   createLearningSubjectSchema,
@@ -13,6 +14,7 @@ import {
   platformSettingsSchema,
   updateSubjectBannerSchema,
   updateSubjectCoverSchema,
+  updateSubjectMetadataSchema,
   userPreferencesSchema,
 } from "@/domain/core-schemas";
 import type { ActionResult } from "@/lib/action-result";
@@ -42,6 +44,7 @@ function databaseErrorSummary(error: unknown) {
 }
 
 function failure(error: unknown): ActionResult<never> {
+  unstable_rethrow(error);
   if (error instanceof ZodError) {
     return { ok: false, error: "راجع البيانات المدخلة", fieldErrors: error.flatten().fieldErrors };
   }
@@ -82,6 +85,21 @@ export async function createLearningSubjectWithStateAction(
   formData: FormData,
 ): Promise<ActionResult<{ id: string }>> {
   return createLearningSubjectAction(formData);
+}
+
+
+export async function updateLearningSubjectMetadataAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const identity = await requireRole("admin", "teacher");
+    const input = updateSubjectMetadataSchema.parse({
+      subjectId: text(formData, "subjectId"),
+      title: text(formData, "title"),
+      description: optional(text(formData, "description")),
+    });
+    await getLearningCoreStore().updateSubjectMetadata(identity, input);
+    revalidatePath("/app");
+    return { ok: true, data: undefined, message: "تم حفظ اسم المادة ووصفها" };
+  } catch (error) { return failure(error); }
 }
 
 export async function updateLearningSubjectBannerAction(formData: FormData): Promise<ActionResult> {
