@@ -28,7 +28,7 @@ async function login(page: Page, role: keyof typeof codes) {
 test.describe("الدخول وتوجيه الأدوار", () => {
   test("يدخل المدير إلى لوحته وتظهر روابطه الأساسية", async ({ page }) => {
     await login(page, "admin");
-    await expect(page.getByRole("heading", { name: /صباح الخير، مدير بصيرة/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /مرحبًا، مدير بصيرة/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "المعلمون", exact: true }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "المواد", exact: true }).first()).toBeVisible();
   });
