@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - release/core-1.0-reset-v2
+      - release/final-client-demo-20260925
       - ui/core-1.0
       - ui/stitch-basira-final
   workflow_dispatch:
@@ -30,8 +31,12 @@ jobs:
         run: npm ci
       - name: Verify release
         run: npm run verify:release
+      - name: Check guarded Cloudflare release script
+        run: node --check scripts/release-cloudflare.mjs
       - name: Build Cloudflare candidate
         run: npm run build:vinext
+      - name: Verify generated Cloudflare deployment config
+        run: npm run verify:cloudflare-config
       - name: Phase 1.7 Production Auth live gate
         env:
           BASIRA_BACKEND: supabase
