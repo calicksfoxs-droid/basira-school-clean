@@ -5,6 +5,7 @@ on:
     branches:
       - release/core-1.0-reset-v2
       - ui/core-1.0
+      - ops/cloudflare-release-hardening
   workflow_dispatch:
 
 permissions:
@@ -29,6 +30,8 @@ jobs:
         run: npm ci
       - name: Verify release
         run: npm run verify:release
+      - name: Check guarded Cloudflare release script
+        run: node --check scripts/release-cloudflare.mjs
       - name: Build Cloudflare candidate
         run: npm run build:vinext
       - name: Phase 1.7 Production Auth live gate
