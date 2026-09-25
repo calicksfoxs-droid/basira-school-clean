@@ -288,6 +288,15 @@ export class SupabaseLearningCoreStore implements LearningCoreStore {
     return subject;
   }
 
+  async updateSubjectMetadata(identity: Identity, input: { subjectId: string; title: string; description?: string }): Promise<void> {
+    const { client } = await this.subjectForWrite(identity, input.subjectId);
+    const { error } = await client.from("subjects").update({
+      title: input.title.trim(),
+      description: input.description?.trim() || null,
+    }).eq("id", input.subjectId);
+    if (error) throw error;
+  }
+
   async updateSubjectBanner(identity: Identity, input: { subjectId: string; title?: string; body?: string; ctaLabel?: string; ctaPath?: string }): Promise<void> {
     const { client } = await this.subjectForWrite(identity, input.subjectId);
     const { error } = await client.from("subjects").update({
