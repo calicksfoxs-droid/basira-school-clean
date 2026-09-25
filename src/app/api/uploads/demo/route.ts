@@ -1,14 +1,16 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth";
+import { getIdentity } from "@/lib/auth";
 import { demoUploadDir } from "@/lib/demo/demo-db";
 import { isDemoBackend } from "@/lib/env";
 import { verifyUploadToken } from "@/lib/upload-token";
 
 export async function POST(request: Request) {
   if (!isDemoBackend) return NextResponse.json({ error: "غير متاح" }, { status: 404 });
-  const identity = await requireRole("teacher");
+  const identity = await getIdentity();
+  if (!identity) return NextResponse.json({ error: "انتهت الجلسة. سجّل الدخول مرة أخرى." }, { status: 401 });
+  if (identity.role !== "teacher") return NextResponse.json({ error: "غير مسموح" }, { status: 403 });
   const formData = await request.formData();
   const tokenValue = formData.get("token");
   const fileValue = formData.get("file");
