@@ -12,6 +12,11 @@ const serverSchema = z.object({
   BASIRA_DEMO_DB_PATH: z.string().default(".data/basira-demo.json"),
   BASIRA_DEMO_UPLOAD_DIR: z.string().default(".data/uploads"),
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(blankToUndefined, z.string().min(1).optional()),
+  VIDEO_STORAGE_PROVIDER: z.enum(["supabase", "r2"]).default("supabase"),
+  R2_ACCOUNT_ID: z.preprocess(blankToUndefined, z.string().min(1).optional()),
+  R2_BUCKET_NAME: z.preprocess(blankToUndefined, z.string().min(1).optional()),
+  R2_ACCESS_KEY_ID: z.preprocess(blankToUndefined, z.string().min(1).optional()),
+  R2_SECRET_ACCESS_KEY: z.preprocess(blankToUndefined, z.string().min(1).optional()),
   MAX_VIDEO_UPLOAD_MB: z.coerce.number().positive().default(50),
   MAX_HANDOUT_UPLOAD_MB: z.coerce.number().positive().default(25),
   MAX_SUBMISSION_UPLOAD_MB: z.coerce.number().positive().default(20),
@@ -37,6 +42,17 @@ const serverSchema = z.object({
         message: "SUPABASE_SERVICE_ROLE_KEY is required for supabase backend",
         path: ["SUPABASE_SERVICE_ROLE_KEY"],
       });
+    }
+    if (data.VIDEO_STORAGE_PROVIDER === "r2") {
+      for (const key of ["R2_ACCOUNT_ID", "R2_BUCKET_NAME", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"] as const) {
+        if (!data[key]) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `${key} is required for R2 video storage`,
+            path: [key],
+          });
+        }
+      }
     }
   }
 
@@ -72,6 +88,11 @@ export const env = parseEnv({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  VIDEO_STORAGE_PROVIDER: process.env.VIDEO_STORAGE_PROVIDER,
+  R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+  R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
+  R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
   MAX_VIDEO_UPLOAD_MB: process.env.MAX_VIDEO_UPLOAD_MB,
   MAX_HANDOUT_UPLOAD_MB: process.env.MAX_HANDOUT_UPLOAD_MB,
   MAX_SUBMISSION_UPLOAD_MB: process.env.MAX_SUBMISSION_UPLOAD_MB,
@@ -91,3 +112,17 @@ export function getSupabaseEnv() {
   };
 }
 
+
+export function hasR2VideoStorage() {
+  return env.VIDEO_STORAGE_PROVIDER === "r2" && Boolean(env.R2_ACCOUNT_ID && env.R2_BUCKET_NAME && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY);
+}
+
+export function getR2Env() {
+  if (!hasR2VideoStorage()) throw new Error("R2 video storage is not configured");
+  return {
+    accountId: env.R2_ACCOUNT_ID!,
+    bucketName: env.R2_BUCKET_NAME!,
+    accessKeyId: env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
+  };
+}
