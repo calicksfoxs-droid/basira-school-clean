@@ -5,6 +5,9 @@ const expectedSecrets = [
   "BASIRA_APP_SECRET",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
 ];
 
 let config;
@@ -25,6 +28,8 @@ if (config?.vars?.NEXT_PUBLIC_APP_URL !== "https://basira-school-clean.calicksfo
 if (config?.vars?.NEXT_PUBLIC_SUPABASE_URL !== "https://fhedbrmdrgzvbtjvlgfu.supabase.co") {
   failures.push("NEXT_PUBLIC_SUPABASE_URL mismatch");
 }
+if (config?.vars?.VIDEO_STORAGE_PROVIDER !== "r2") failures.push("VIDEO_STORAGE_PROVIDER is not r2");
+if (config?.vars?.R2_BUCKET_NAME !== "basira-videos") failures.push("R2_BUCKET_NAME mismatch");
 
 const required = new Set(config?.secrets?.required ?? []);
 for (const secret of expectedSecrets) {
@@ -42,5 +47,7 @@ console.log(JSON.stringify({
   path,
   worker: config.name,
   backend: config.vars.BASIRA_BACKEND,
+  videoStorage: config.vars.VIDEO_STORAGE_PROVIDER,
+  r2Bucket: config.vars.R2_BUCKET_NAME,
   requiredSecrets: expectedSecrets,
 }, null, 2));
