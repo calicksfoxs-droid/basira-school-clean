@@ -97,3 +97,8 @@ deploying if its project hostname no longer resolves.
 For the controlled Cloudflare / Render / Vercel / Netlify comparison, exact-SHA
 verification rules, and benchmark acceptance criteria, see
 `docs/MULTIHOST_DEPLOYMENT.md`.
+
+
+### Guarded Cloudflare release
+
+Use `npm run release:cloudflare` only from an authorized operator environment with `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and the public Supabase key. The Worker must already contain `BASIRA_APP_SECRET`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. The command verifies the exact Git SHA, required bindings, rollback target, deployment, and deep health before declaring success.
