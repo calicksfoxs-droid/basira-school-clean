@@ -1,5 +1,5 @@
 "use server";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createUserSchema } from "@/domain/schemas";
 import type { ActionResult } from "@/lib/action-result";
@@ -58,6 +58,7 @@ export async function createTeacherWithRevealAction(
       message: "تم إنشاء المعلّم وإصدار رمز الدخول",
     };
   } catch (error) {
+    unstable_rethrow(error);
     console.error(error instanceof AppError ? `[${error.code}] ${error.message}` : error);
     return {
       ok: false,
@@ -127,6 +128,7 @@ export async function createStudentWithRevealAction(
       message: "تم إنشاء الطالب وإصدار رمز الدخول",
     };
   } catch (error) {
+    unstable_rethrow(error);
     console.error(error instanceof AppError ? `[${error.code}] ${error.message}` : error);
     return {
       ok: false,
@@ -177,6 +179,7 @@ export async function resetAccessCodeWithRevealAction(
       message: "تم إصدار رمز دخول جديد",
     };
   } catch (error) {
+    unstable_rethrow(error);
     console.error(error instanceof AppError ? `[${error.code}] ${error.message}` : error);
     return {
       ok: false,
