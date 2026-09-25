@@ -26,9 +26,28 @@ export async function POST(request: Request) {
     const container = body.lessonPartId ?? "direct";
     const scopeId = details.group?.id ?? details.subject.id;
     const objectPath = `${scopeId}/${details.subject.id}/${details.lesson.id}/${container}/${randomUUID()}.${extension}`;
-    const token = createUploadToken({ userId: identity.userId, kind: body.kind, lessonId: body.lessonId, lessonPartId: body.lessonPartId, objectPath, originalFilename: body.fileName, mimeType: body.mimeType, sizeBytes: body.sizeBytes, title: body.title || body.fileName, exp: Date.now() + 20 * 60 * 1000 });
-    const storageUrl = !isDemoBackend && env.NEXT_PUBLIC_SUPABASE_URL ? env.NEXT_PUBLIC_SUPABASE_URL.replace(".supabase.co", ".storage.supabase.co") : undefined;
-    return NextResponse.json({ mode: isDemoBackend ? "demo" : "supabase", token, bucket, objectPath, storageUrl });
+    const storageProvider = isDemoBackend
+      ? "demo"
+      : body.kind === "video" && env.VIDEO_STORAGE_PROVIDER === "r2"
+        ? "r2"
+        : "supabase";
+    const token = createUploadToken({
+      userId: identity.userId,
+      kind: body.kind,
+      storageProvider,
+      lessonId: body.lessonId,
+      lessonPartId: body.lessonPartId,
+      objectPath,
+      originalFilename: body.fileName,
+      mimeType: body.mimeType,
+      sizeBytes: body.sizeBytes,
+      title: body.title || body.fileName,
+      exp: Date.now() + 20 * 60 * 1000,
+    });
+    const storageUrl = storageProvider === "supabase" && env.NEXT_PUBLIC_SUPABASE_URL
+      ? env.NEXT_PUBLIC_SUPABASE_URL.replace(".supabase.co", ".storage.supabase.co")
+      : undefined;
+    return NextResponse.json({ mode: storageProvider, token, bucket, objectPath, storageUrl });
   } catch (error) {
     console.error("upload_authorize_failed", error instanceof Error ? error.message : "unknown");
     return NextResponse.json({ error: "تعذر تجهيز الرفع" }, { status: 403 });
