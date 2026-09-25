@@ -102,3 +102,26 @@ verification rules, and benchmark acceptance criteria, see
 ### Guarded Cloudflare release
 
 Use `npm run release:cloudflare` only from an authorized operator environment with `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and the public Supabase key. The Worker must already contain `BASIRA_APP_SECRET`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. The command verifies the exact Git SHA, required bindings, rollback target, deployment, and deep health before declaring success.
+
+
+## Cloudflare R2 video storage
+
+Production video storage is designed for Cloudflare R2 while Supabase remains the identity/database backend and continues to store PDF handouts.
+
+Runtime configuration:
+- `VIDEO_STORAGE_PROVIDER=r2`
+- `R2_BUCKET_NAME=basira-videos`
+- Worker secrets: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
+- Existing Supabase runtime secrets remain required.
+
+Upload flow:
+1. Teacher requests an authenticated upload authorization.
+2. The app issues a short-lived signed upload token bound to the teacher, lesson, MIME type, size, and R2 provider.
+3. The browser streams the video to the same-origin `/api/uploads/r2` route.
+4. The Worker forwards the stream to the private R2 bucket using a short-lived S3-compatible signature.
+5. Finalization verifies the R2 object exists and its size matches before recording the asset in Supabase.
+6. Playback checks R2 first and falls back to Supabase for older videos.
+
+The bucket stays private. Do not enable a public R2 development URL for lesson videos.
+
+The guarded `npm run release:cloudflare` command refuses to deploy unless the R2 bucket exists and every required Worker secret binding is present.
