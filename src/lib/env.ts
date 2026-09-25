@@ -12,7 +12,7 @@ const serverSchema = z.object({
   BASIRA_DEMO_DB_PATH: z.string().default(".data/basira-demo.json"),
   BASIRA_DEMO_UPLOAD_DIR: z.string().default(".data/uploads"),
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(blankToUndefined, z.string().min(1).optional()),
-  MAX_VIDEO_UPLOAD_MB: z.coerce.number().positive().default(250),
+  MAX_VIDEO_UPLOAD_MB: z.coerce.number().positive().default(50),
   MAX_HANDOUT_UPLOAD_MB: z.coerce.number().positive().default(25),
   MAX_SUBMISSION_UPLOAD_MB: z.coerce.number().positive().default(20),
 }).superRefine((data, ctx) => {
