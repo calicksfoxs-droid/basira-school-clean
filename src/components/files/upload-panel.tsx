@@ -19,12 +19,33 @@ export function UploadPanel({ lessonId, lessonPartId, kind }: { lessonId: string
     setBusy(true); setError(undefined); setProgress(0);
     try {
       const authorization = await fetch("/api/uploads/authorize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lessonId, lessonPartId, kind, fileName: file.name, mimeType: file.type, sizeBytes: file.size, title: file.name }) });
-      const setup = await authorization.json() as { error?: string; mode?: "demo" | "supabase"; token?: string; bucket?: string; objectPath?: string; storageUrl?: string };
+      const setup = await authorization.json() as { error?: string; mode?: "demo" | "supabase" | "r2"; token?: string; bucket?: string; objectPath?: string; storageUrl?: string };
       if (!authorization.ok || !setup.token || !setup.mode) throw new Error(setup.error || "تعذر تجهيز الرفع");
       if (setup.mode === "demo") {
         const formData = new FormData(); formData.set("file", file); formData.set("token", setup.token);
         const response = await fetch("/api/uploads/demo", { method: "POST", body: formData });
         if (!response.ok) throw new Error((await response.json()).error || "فشل الرفع");
+        setProgress(100);
+      } else if (setup.mode === "r2") {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", "/api/uploads/r2");
+          xhr.setRequestHeader("x-basira-upload-token", setup.token!);
+          xhr.setRequestHeader("content-type", file.type);
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) setProgress(Math.round((event.loaded / event.total) * 100));
+          };
+          xhr.onerror = () => reject(new Error("تعذر الاتصال بتخزين الفيديو"));
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else {
+              let message = "فشل رفع الفيديو";
+              try { message = (JSON.parse(xhr.responseText) as { error?: string }).error || message; } catch {}
+              reject(new Error(message));
+            }
+          };
+          xhr.send(file);
+        });
         setProgress(100);
       } else {
         const supabase = createClient();

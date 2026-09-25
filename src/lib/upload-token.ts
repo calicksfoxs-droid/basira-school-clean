@@ -5,6 +5,7 @@ import { env } from "@/lib/env";
 export interface UploadTokenPayload {
   userId: string;
   kind: "video" | "handout" | "aid" | "submission";
+  storageProvider?: "demo" | "supabase" | "r2";
   lessonId?: string;
   lessonPartId?: string;
   submissionId?: string;

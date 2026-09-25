@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isDemoBackend } from "@/lib/env";
+import { env, isDemoBackend } from "@/lib/env";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { BUILD_COMMIT } from "@/generated/build-info";
 
@@ -23,6 +23,7 @@ export async function GET(request: Request) {
     ok: database !== "unreachable",
     service: "basira-school-platform",
     backend: isDemoBackend ? "demo" : "supabase",
+    videoStorage: isDemoBackend ? "demo" : env.VIDEO_STORAGE_PROVIDER,
     ...(database ? { database } : {}),
     commit: BUILD_COMMIT === "local" ? "local" : BUILD_COMMIT.slice(0, 12),
     timestamp: new Date().toISOString(),

@@ -8,6 +8,7 @@ on:
       - ui/core-1.0
       - ui/stitch-basira-final
       - fix/teacher-workspace-provisioning
+      - feature/cloudflare-r2-video-storage
   workflow_dispatch:
 
 permissions:

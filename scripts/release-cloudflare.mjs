@@ -5,6 +5,9 @@ const EXPECTED_SECRETS = [
   "BASIRA_APP_SECRET",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
 ];
 
 function fail(message) {
@@ -56,13 +59,13 @@ const buildEnv = {
   RUN_UI_E2E: "1",
 };
 
-console.log("\n[1/6] Verifying release...");
+console.log("\n[1/7] Verifying release...");
 run("npm", ["run", "verify:release"], { env: buildEnv });
 
-console.log("\n[2/6] Building Vinext Cloudflare candidate...");
+console.log("\n[2/7] Building Vinext Cloudflare candidate...");
 run("npm", ["run", "build:vinext"], { env: buildEnv });
 
-console.log("\n[3/6] Validating remote Worker secret bindings...");
+console.log("\n[3/7] Validating remote Worker secret bindings...");
 const secretList = run("npx", ["wrangler", "secret", "list", "--config", "dist/server/wrangler.json"], {
   capture: true,
   env: process.env,
@@ -72,7 +75,14 @@ for (const secret of EXPECTED_SECRETS) {
 }
 console.log("Required Worker secret bindings are present.");
 
-console.log("\n[4/6] Capturing rollback target...");
+console.log("\n[4/7] Verifying Cloudflare R2 bucket...");
+run("npx", ["wrangler", "r2", "bucket", "info", "basira-videos", "--json", "--config", "dist/server/wrangler.json"], {
+  capture: true,
+  env: process.env,
+});
+console.log("R2 bucket basira-videos is available.");
+
+console.log("\n[5/7] Capturing rollback target...");
 const beforeRaw = run("npx", ["wrangler", "deployments", "list", "--config", "dist/server/wrangler.json", "--json"], {
   capture: true,
   env: process.env,
@@ -82,10 +92,10 @@ try { before = JSON.parse(beforeRaw); } catch { fail("Could not parse Cloudflare
 const rollbackId = before?.[0]?.id ?? before?.[0]?.deployment_id ?? null;
 console.log(`Previous deployment / rollback target: ${rollbackId ?? "unavailable"}`);
 
-console.log("\n[5/6] Deploying exact candidate...");
+console.log("\n[6/7] Deploying exact candidate...");
 run("npm", ["run", "deploy:vinext"], { env: { ...process.env, GITHUB_SHA: head } });
 
-console.log("\n[6/6] Verifying deployed health and provenance...");
+console.log("\n[7/7] Verifying deployed health and provenance...");
 const expectedShort = head.slice(0, 12);
 let health;
 let lastError;
@@ -101,6 +111,7 @@ for (let attempt = 0; attempt < 12; attempt += 1) {
       body?.ok === true &&
       body?.backend === "supabase" &&
       body?.database === "ready" &&
+      body?.videoStorage === "r2" &&
       String(body?.commit ?? "").toLowerCase() === expectedShort
     ) {
       health = body;
@@ -128,6 +139,7 @@ console.log(JSON.stringify({
   commit: health.commit,
   backend: health.backend,
   database: health.database,
+  videoStorage: health.videoStorage,
   deploymentId,
   rollbackId,
 }, null, 2));

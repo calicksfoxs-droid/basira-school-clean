@@ -4,8 +4,9 @@ import { NextResponse } from "next/server";
 import { getIdentity } from "@/lib/auth";
 import { getStore } from "@/lib/data";
 import { demoUploadDir } from "@/lib/demo/demo-db";
-import { isDemoBackend } from "@/lib/env";
+import { hasR2VideoStorage, isDemoBackend } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createR2PresignedUrl, inspectR2Object } from "@/lib/r2-storage";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,6 +22,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     if (isDemoBackend) {
       const buffer = await readFile(path.join(demoUploadDir(), asset.storagePath));
       return new NextResponse(buffer, { headers: { "content-type": asset.mimeType, "content-disposition": `${asset.kind === "video" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(asset.originalFilename)}`, "cache-control": "private, no-store" } });
+    }
+    if (asset.kind === "video" && hasR2VideoStorage()) {
+      const object = await inspectR2Object(asset.storagePath);
+      if (object.exists) {
+        return NextResponse.redirect(createR2PresignedUrl("GET", asset.storagePath, 60));
+      }
     }
     const bucket = asset.kind === "video" ? "lesson-videos" : "lesson-handouts";
     const supabase = await createServerSupabaseClient();

@@ -4,8 +4,9 @@ import { NextResponse } from "next/server";
 import { getIdentity } from "@/lib/auth";
 import { getStore } from "@/lib/data";
 import { demoUploadDir } from "@/lib/demo/demo-db";
-import { isDemoBackend } from "@/lib/env";
+import { hasR2VideoStorage, isDemoBackend } from "@/lib/env";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { deleteR2Object, inspectR2Object } from "@/lib/r2-storage";
 import { verifyUploadToken } from "@/lib/upload-token";
 
 function bucketFor(kind: "video" | "handout") {
@@ -36,11 +37,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "نوع أو امتداد الملف غير مدعوم في Core 1.0" }, { status: 400 });
     }
 
-    if (isDemoBackend) {
+    if (isDemoBackend || payload.storageProvider === "demo") {
       const filePath = path.join(demoUploadDir(), payload.objectPath);
       const info = await stat(filePath);
       if (!info.isFile() || info.size !== payload.sizeBytes) throw new Error("الملف المرفوع غير مكتمل");
       cleanup = () => rm(filePath, { force: true });
+    } else if (payload.storageProvider === "r2") {
+      if (payload.kind !== "video" || !hasR2VideoStorage()) throw new Error("R2 video storage is unavailable");
+      const info = await inspectR2Object(payload.objectPath);
+      if (!info.exists) throw new Error("الملف غير موجود في R2");
+      if (info.size !== payload.sizeBytes) throw new Error("حجم ملف R2 غير مطابق");
+      cleanup = () => deleteR2Object(payload.objectPath);
     } else {
       const bucket = bucketFor(payload.kind);
       const admin = createAdminSupabaseClient();
