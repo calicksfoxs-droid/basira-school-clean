@@ -32,6 +32,7 @@ for (const [role, profile] of Object.entries(profiles)) {
           await page.goto(route);
           await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toBeVisible();
           await expect(page.getByLabel("جارٍ تحميل الصفحة", { exact: true })).toHaveCount(0);
+          await page.waitForFunction(() => Array.from(document.querySelectorAll<HTMLImageElement>("main img")).every(image => image.complete && image.naturalWidth > 0), null, { timeout: 10000 });
           await expect(page.getByRole("heading", { name: "تعذر تحميل الصفحة", exact: true })).toHaveCount(0);
           const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
           expect.soft(overflow, `${route} ${theme} ${width}: page overflow`).toBe(false);
