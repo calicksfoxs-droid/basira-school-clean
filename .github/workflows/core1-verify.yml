@@ -34,6 +34,29 @@ jobs:
         run: node --check scripts/release-cloudflare.mjs
       - name: Build Cloudflare candidate
         run: npm run build:vinext
+      - name: Verify generated Cloudflare deployment config
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const cfg = JSON.parse(fs.readFileSync("dist/server/wrangler.json", "utf8"));
+          const required = ["BASIRA_APP_SECRET", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
+          const got = new Set(cfg?.secrets?.required ?? []);
+          const failures = [];
+          if (cfg?.name !== "basira-school-clean") failures.push("worker name mismatch");
+          if (cfg?.vars?.BASIRA_BACKEND !== "supabase") failures.push("backend mismatch");
+          if (cfg?.vars?.NEXT_PUBLIC_APP_URL !== "https://basira-school-clean.calicksfoxs.workers.dev") failures.push("app url mismatch");
+          if (cfg?.vars?.NEXT_PUBLIC_SUPABASE_URL !== "https://fhedbrmdrgzvbtjvlgfu.supabase.co") failures.push("supabase url mismatch");
+          for (const name of required) if (!got.has(name)) failures.push("missing required secret name: " + name);
+          if (failures.length) {
+            console.error(JSON.stringify({ failures }, null, 2));
+            process.exit(1);
+          }
+          console.log(JSON.stringify({
+            worker: cfg.name,
+            backend: cfg.vars.BASIRA_BACKEND,
+            requiredSecretsPresent: required,
+          }, null, 2));
+          NODE
       - name: Phase 1.7 Production Auth live gate
         env:
           BASIRA_BACKEND: supabase
