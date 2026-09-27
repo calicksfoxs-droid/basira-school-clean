@@ -1,33 +1,25 @@
-import { CreateStudentForm } from "@/components/forms/create-user-forms";
+import { CreateStudentIdentityForm } from "@/components/forms/create-student-identity-form";
 import { UserTable } from "@/components/users/user-table";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Notice } from "@/components/ui/notice";
 import { requireRole } from "@/lib/auth";
 import { getStore } from "@/lib/data";
-import { getLearningCoreStore } from "@/lib/core";
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ notice?: string; error?: string }> }) {
   const identity = await requireRole("admin");
-  const store = await getStore();
-  const core = getLearningCoreStore();
-  const [users, subjects] = await Promise.all([
-    store.listUsers(identity, "student"),
-    core.listLearningSubjects(identity),
-  ]);
-  const subjectDetails = await Promise.all(subjects.map((subject) => core.getLearningSubject(identity, subject.id)));
-  const learningGroups = subjectDetails.flatMap((details) => details.groups).filter((group) => group.status === "active");
+  const users = await (await getStore()).listUsers(identity, "student");
   const params = await searchParams;
 
   return <>
-    <PageHeader title="الطلاب" description="إنشاء حسابات الطلاب داخل مجموعات Learning Core النشطة وإدارة الوصول."/>
+    <PageHeader title="الطلاب" description="إدارة هويات دخول الطلاب. التسجيل في المواد والمجموعات عملية منفصلة لدى المعلّم."/>
     <Notice {...params}/>
     <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
       <UserTable users={users} returnTo="/app/admin/students"/>
       <Card>
-        <CardTitle>طالب جديد</CardTitle>
-        <CardDescription>اختر مجموعة Learning Core نشطة فقط.</CardDescription>
-        <div className="mt-5"><CreateStudentForm groups={learningGroups} returnTo="/app/admin/students"/></div>
+        <CardTitle>حساب طالب جديد</CardTitle>
+        <CardDescription>أنشئ هوية دخول فقط؛ لن يُضاف الطالب تلقائيًا إلى أي مادة أو مجموعة.</CardDescription>
+        <div className="mt-5"><CreateStudentIdentityForm/></div>
       </Card>
     </div>
   </>;
