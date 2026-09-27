@@ -15,6 +15,11 @@ import { SupabaseLearningCoreStore } from "./supabase-learning-core-store";
 type Row = Record<string, unknown>;
 const optionalString = (value: unknown) => value == null ? undefined : String(value);
 
+function oneRow(data: unknown): Row {
+  const row = Array.isArray(data) ? data[0] : data;
+  return assertFound((row ?? null) as Row | null);
+}
+
 function gradeFrom(row: Row): CurriculumGrade {
   return {
     id: String(row.id),
@@ -139,7 +144,7 @@ export class RepairedSupabaseLearningCoreStore extends SupabaseLearningCoreStore
       p_description: input.description?.trim() || null,
     });
     if (error) throw error;
-    return gradeFrom(data as Row);
+    return gradeFrom(oneRow(data));
   }
 
   async createLearningSubject(
@@ -155,7 +160,7 @@ export class RepairedSupabaseLearningCoreStore extends SupabaseLearningCoreStore
       p_cover_key: inferSubjectCoverKey(input.title),
     });
     if (error) throw error;
-    return subjectFrom(data as Row);
+    return subjectFrom(oneRow(data));
   }
 
   async createSubjectUnit(
@@ -178,7 +183,7 @@ export class RepairedSupabaseLearningCoreStore extends SupabaseLearningCoreStore
       p_description: input.description?.trim() || null,
     });
     if (error) throw error;
-    return unitFrom(data as Row);
+    return unitFrom(oneRow(data));
   }
 
   async createUnitLesson(
@@ -194,6 +199,6 @@ export class RepairedSupabaseLearningCoreStore extends SupabaseLearningCoreStore
       p_structure_mode: input.structureMode,
     });
     if (error) throw error;
-    return lessonFrom(data as Row);
+    return lessonFrom(oneRow(data));
   }
 }
