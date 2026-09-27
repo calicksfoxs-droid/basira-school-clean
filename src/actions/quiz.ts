@@ -1,5 +1,4 @@
 "use server";
-import { rm } from "node:fs/promises";
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { createQuizSchema } from "@/domain/schemas";
@@ -25,7 +24,6 @@ export async function createQuizAction(payload: unknown) {
 export async function submitQuizFormAction(formData: FormData) {
   const quizId = String(formData.get("quizId") ?? "");
   let submissionId: string | undefined;
-  const createdLocalPaths: string[] = [];
   let identity;
   let store;
 
@@ -62,7 +60,6 @@ export async function submitQuizFormAction(formData: FormData) {
     if (submissionId && identity) {
       try { await store?.voidSubmission(identity, submissionId); } catch { /* best effort rollback */ }
     }
-    await Promise.all(createdLocalPaths.map((file) => rm(file, { force: true }).catch(() => undefined)));
     handleActionError(error, `/app/student/quizzes/${quizId}`);
   }
 
