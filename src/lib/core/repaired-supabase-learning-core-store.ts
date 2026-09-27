@@ -2,6 +2,7 @@ import "server-only";
 import type { Identity } from "@/domain/models";
 import type {
   CurriculumGrade,
+  CurriculumGradeDetails,
   LearningSubject,
   LearningSubjectDetails,
   SubjectUnit,
@@ -84,11 +85,42 @@ function lessonFrom(row: Row): UnitLesson {
 /**
  * Repair-line adapter.
  *
- * The legacy Supabase store remains available for the stable non-student paths,
+ * The legacy Supabase store remains available for stable non-student paths,
  * while repaired Core paths move to authenticated RPC/RLS boundaries. This lets
  * us converge the product without a destructive rewrite of the existing store.
  */
 export class RepairedSupabaseLearningCoreStore extends SupabaseLearningCoreStore {
+  async listCurriculumGrades(identity: Identity): Promise<CurriculumGrade[]> {
+    assertAllowed(identity.status === "active");
+    if (identity.role !== "student") return super.listCurriculumGrades(identity);
+
+    const client = await createServerSupabaseClient();
+    const { data, error } = await client.from("curriculum_grades")
+      .select("*")
+      .eq("status", "active")
+      .order("display_order");
+    if (error) throw error;
+    return ((data ?? []) as Row[]).map(gradeFrom);
+  }
+
+  async getCurriculumGrade(identity: Identity, gradeId: string): Promise<CurriculumGradeDetails> {
+    if (identity.role !== "student") return super.getCurriculumGrade(identity, gradeId);
+    assertAllowed(identity.status === "active");
+
+    const client = await createServerSupabaseClient();
+    const { data, error } = await client.from("curriculum_grades")
+      .select("*")
+      .eq("id", gradeId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (error) throw error;
+    const grade = gradeFrom(assertFound(data as Row | null));
+    const subjects = (await this.listLearningSubjects(identity))
+      .filter((subject) => subject.gradeId === gradeId);
+    assertAllowed(subjects.length > 0);
+    return { grade, subjects };
+  }
+
   async listLearningSubjects(identity: Identity): Promise<LearningSubject[]> {
     assertAllowed(identity.status === "active");
     if (identity.role !== "student") return super.listLearningSubjects(identity);
@@ -103,7 +135,7 @@ export class RepairedSupabaseLearningCoreStore extends SupabaseLearningCoreStore
     if (identity.role !== "student") return super.getLearningSubject(identity, subjectId);
     assertAllowed(identity.status === "active");
 
-    // All three reads run as the authenticated student. RLS, not service-role
+    // All reads run as the authenticated student. RLS, not service-role
     // post-filtering, is the privacy boundary. Group/roster data is intentionally
     // absent from the student projection.
     const client = await createServerSupabaseClient();
