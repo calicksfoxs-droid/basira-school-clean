@@ -46,6 +46,11 @@ export interface SubmitAnswerInput {
   fileAssetId?: string;
 }
 
+export type AttachAssetInput = Omit<Asset, "id" | "createdAt" | "state"> & {
+  state?: Asset["state"];
+  storageProvider?: "demo" | "supabase" | "r2";
+};
+
 export interface BasiraStore {
   getDashboard(identity: Identity): Promise<DashboardSummary>;
   listUsers(identity: Identity, role?: Role): Promise<UserRecord[]>;
@@ -69,7 +74,7 @@ export interface BasiraStore {
   getLesson(identity: Identity, lessonId: string): Promise<LessonDetails>;
   publishLesson(identity: Identity, lessonId: string): Promise<void>;
 
-  attachAsset(identity: Identity, input: Omit<Asset, "id" | "createdAt" | "state"> & { state?: Asset["state"] }): Promise<Asset>;
+  attachAsset(identity: Identity, input: AttachAssetInput): Promise<Asset>;
   getAsset(identity: Identity, assetId: string): Promise<Asset>;
 
   createQuiz(identity: Identity, input: { lessonId?: string; lessonPartId?: string; title: string; instructions?: string; questions: CreateQuestionInput[] }): Promise<string>;
