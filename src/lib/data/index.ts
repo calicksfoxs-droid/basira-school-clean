@@ -1,12 +1,12 @@
 import "server-only";
 import { isDemoBackend } from "@/lib/env";
 import type { BasiraStore } from "./contracts";
-import { DemoStore } from "./demo-store";
-import { SupabaseStore } from "./supabase-store";
+import { RepairedDemoStore } from "./repaired-demo-store";
+import { RepairedSupabaseStore } from "./repaired-supabase-store";
 
-let demoStore: DemoStore | undefined;
+let demoStore: RepairedDemoStore | undefined;
 
 export async function getStore(): Promise<BasiraStore> {
-  if (isDemoBackend) return (demoStore ??= new DemoStore());
-  return new SupabaseStore();
+  if (isDemoBackend) return (demoStore ??= new RepairedDemoStore());
+  return new RepairedSupabaseStore();
 }
