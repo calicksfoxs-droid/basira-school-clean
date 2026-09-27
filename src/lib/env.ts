@@ -56,7 +56,6 @@ const serverSchema = z.object({
     }
   }
 
-  // Fail in production if BASIRA_APP_SECRET is default or too short
   if (process.env.NODE_ENV === "production") {
     if (data.BASIRA_APP_SECRET === "basira-local-secret-change-before-production") {
       ctx.addIssue({
@@ -76,6 +75,12 @@ const serverSchema = z.object({
 });
 
 export function parseEnv(source: Record<string, string | undefined>) {
+  // Demo is a development/test convenience only. A production deployment with
+  // a missing backend flag must stop instead of silently booting against local
+  // demo persistence and appearing healthy with the wrong data source.
+  if (process.env.NODE_ENV === "production" && !source.BASIRA_BACKEND?.trim()) {
+    throw new Error("BASIRA_BACKEND must be set explicitly in production");
+  }
   return serverSchema.parse(source);
 }
 
@@ -111,7 +116,6 @@ export function getSupabaseEnv() {
     serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   };
 }
-
 
 export function hasR2VideoStorage() {
   return env.VIDEO_STORAGE_PROVIDER === "r2" && Boolean(env.R2_ACCOUNT_ID && env.R2_BUCKET_NAME && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY);
