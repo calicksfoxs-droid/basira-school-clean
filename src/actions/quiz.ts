@@ -1,7 +1,5 @@
 "use server";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { createQuizSchema } from "@/domain/schemas";
@@ -9,8 +7,6 @@ import { requireRole } from "@/lib/auth";
 import { getStore } from "@/lib/data";
 import { AppError } from "@/lib/data/errors";
 import { CORE1_CAPABILITIES, CORE1_DISABLED_MESSAGE } from "@/lib/release/core1-capabilities";
-import { demoUploadDir } from "@/lib/demo/demo-db";
-import { env, isDemoBackend } from "@/lib/env";
 import { handleActionError, redirectNotice } from "./helpers";
 
 export async function createQuizAction(payload: unknown) {
@@ -26,43 +22,41 @@ export async function createQuizAction(payload: unknown) {
   }
 }
 
-const fileTypes = new Set(["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]);
-
 export async function submitQuizFormAction(formData: FormData) {
   const quizId = String(formData.get("quizId") ?? "");
   let submissionId: string | undefined;
   const createdLocalPaths: string[] = [];
   let identity;
   let store;
-  let quiz;
 
   try {
     identity = await requireRole("student");
     store = await getStore();
-    quiz = await store.getQuiz(identity, quizId);
-    if (!quiz.questions.every((question) => question.type === "mcq" || question.type === "true_false")) throw new AppError(CORE1_DISABLED_MESSAGE, "CORE1_DISABLED", 409);
-    const answers = quiz.questions.map((question) => {
-      if (question.type === "mcq") return { questionId: question.id, selectedOptionId: String(formData.get(`question_${question.id}`) ?? "") || undefined };
-      if (question.type === "true_false") return { questionId: question.id, booleanValue: formData.get(`question_${question.id}`) === "true" };
-      if (question.type === "essay_text") return { questionId: question.id, textValue: String(formData.get(`question_${question.id}`) ?? "") };
-      return { questionId: question.id };
-    });
-    submissionId = await store.submitQuiz(identity, quizId, answers);
-    for (const question of quiz.questions.filter((item) => item.type === "essay_file")) {
-      const value = formData.get(`question_${question.id}`);
-      if (!(value instanceof File) || value.size === 0) throw new Error("ارفع ملف الإجابة المطلوب");
-      if (!fileTypes.has(value.type) || value.size > env.MAX_SUBMISSION_UPLOAD_MB * 1024 * 1024) throw new Error("ملف الإجابة غير مدعوم أو أكبر من الحد المسموح");
-      const extension = value.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "") || "bin";
-      const storagePath = `${quiz.group?.id ?? quiz.lesson.subjectId}/${quiz.quiz.id}/${identity.userId}/${submissionId}/${randomUUID()}.${extension}`;
-      const bytes = new Uint8Array(await value.arrayBuffer());
-      if (isDemoBackend) {
-        const fullPath = path.join(demoUploadDir(), storagePath);
-        await mkdir(path.dirname(fullPath), { recursive: true });
-        await writeFile(fullPath, bytes);
-        createdLocalPaths.push(fullPath);
-      }
-      await store.attachSubmissionFile(identity, submissionId, question.id, { storagePath, originalFilename: value.name, mimeType: value.type, sizeBytes: value.size, bytes });
+    const quiz = await store.getQuiz(identity, quizId);
+    if (!quiz.questions.every((question) => question.type === "mcq" || question.type === "true_false")) {
+      throw new AppError(CORE1_DISABLED_MESSAGE, "CORE1_DISABLED", 409);
     }
+
+    const answers = quiz.questions.map((question) => {
+      const value = formData.get(`question_${question.id}`);
+
+      if (question.type === "mcq") {
+        if (typeof value !== "string" || !value) {
+          throw new AppError("أجب عن جميع الأسئلة قبل التسليم", "QUIZ_ANSWER_REQUIRED", 400);
+        }
+        return { questionId: question.id, selectedOptionId: value };
+      }
+
+      // Do not coerce a missing True/False field to `false`. The server must
+      // distinguish an unanswered question from an explicit False answer even
+      // if browser-side `required` validation is bypassed.
+      if (value !== "true" && value !== "false") {
+        throw new AppError("أجب عن جميع الأسئلة قبل التسليم", "QUIZ_ANSWER_REQUIRED", 400);
+      }
+      return { questionId: question.id, booleanValue: value === "true" };
+    });
+
+    submissionId = await store.submitQuiz(identity, quizId, answers);
     revalidatePath("/app/student");
   } catch (error) {
     if (submissionId && identity) {
