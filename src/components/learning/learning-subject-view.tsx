@@ -14,8 +14,10 @@ import { subjectTheme, subjectThemeMeta } from "@/lib/ui-themes";
 
 export function LearningSubjectView({ identity, details }: { identity: Identity; details: LearningSubjectDetails }) {
   const editable = identity.role === "teacher";
+  const isStudent = identity.role === "student";
   const theme = subjectTheme(details.subject);
   const meta = subjectThemeMeta[theme];
+
   return <div className={`subject-theme-${theme} grid gap-6`}>
     <section className="science-art relative min-h-[320px] overflow-hidden rounded-lg border border-[var(--subject-border)] bg-[var(--subject-tint)]">
       <Image data-testid="subject-hero-cover" src={subjectCoverPath(details.subject)} alt="" fill priority sizes="(max-width: 1024px) 100vw, 1100px" className="object-cover opacity-25 mix-blend-multiply"/>
@@ -25,16 +27,16 @@ export function LearningSubjectView({ identity, details }: { identity: Identity;
         <h1 className="font-heading mt-4 text-3xl font-bold leading-[1.45] sm:text-4xl">{details.subject.bannerTitle || details.subject.title}</h1>
         <p className="mt-3 max-w-2xl text-sm leading-8 text-[var(--muted)]">{details.subject.bannerBody || details.subject.description || "مسار تعلّم متدرج من الوحدة الأولى حتى آخر درس."}</p>
         <div className="mt-6 flex flex-wrap gap-2">
-          {identity.role === "student" && <Link href={`/app/student/subjects/${details.subject.id}/journey`} className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--subject-primary)] px-4 text-sm font-semibold text-white"><Compass className="size-4"/>فتح مسار التعلم</Link>}
+          {isStudent && <Link href={`/app/student/subjects/${details.subject.id}/journey`} className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--subject-primary)] px-4 text-sm font-semibold text-white"><Compass className="size-4"/>فتح مسار التعلم</Link>}
           {editable && details.subject.status !== "published" && <ActionForm action={publishLearningSubjectAction}><input type="hidden" name="subjectId" value={details.subject.id}/><Button className="rounded-md bg-[var(--subject-primary)] hover:brightness-95">نشر المادة للطلاب</Button></ActionForm>}
         </div>
       </div>
     </section>
 
-    <div className="grid gap-3 sm:grid-cols-3">
-      <div className="stitch-panel flex items-center gap-3 p-4"><span className="grid size-10 place-items-center rounded-md bg-[var(--subject-tint)] text-[var(--subject-primary)]"><Users className="size-5"/></span><span><strong className="font-heading block text-2xl">{details.groups.length}</strong><small className="text-xs text-[var(--muted)]">{identity.role === "student" ? "مجموعات مرتبطة" : "المجموعات"}</small></span></div>
+    <div className={`grid gap-3 ${isStudent ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+      {!isStudent && <div className="stitch-panel flex items-center gap-3 p-4"><span className="grid size-10 place-items-center rounded-md bg-[var(--subject-tint)] text-[var(--subject-primary)]"><Users className="size-5"/></span><span><strong className="font-heading block text-2xl">{details.groups.length}</strong><small className="text-xs text-[var(--muted)]">المجموعات</small></span></div>}
       <div className="stitch-panel flex items-center gap-3 p-4"><span className="grid size-10 place-items-center rounded-md bg-[var(--subject-tint)] text-[var(--subject-primary)]"><Layers3 className="size-5"/></span><span><strong className="font-heading block text-2xl">{details.units.length}</strong><small className="text-xs text-[var(--muted)]">الوحدات</small></span></div>
-      <div className="stitch-panel flex items-center gap-3 p-4"><span className="grid size-10 place-items-center rounded-md bg-[var(--subject-tint)] text-[var(--subject-primary)]"><BookOpen className="size-5"/></span><span><strong className="font-heading block text-2xl">{details.lessons.length}</strong><small className="text-xs text-[var(--muted)]">الدروس</small></span></div>
+      <div className="stitch-panel flex items-center gap-3 p-4"><span className="grid size-10 place-items-center rounded-md bg-[var(--subject-tint)] text-[var(--subject-primary)]"><BookOpen className="size-5"/></span><span><strong className="font-heading block text-2xl">{details.lessons.length}</strong><small className="text-xs text-[var(--muted)]">الدروس المتاحة الآن</small></span></div>
     </div>
 
     {editable && <SubjectAuthoringToolbar subject={details.subject} groups={details.groups}/>}
