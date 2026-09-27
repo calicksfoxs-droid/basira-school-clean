@@ -1,9 +1,10 @@
 import "server-only";
-import type { Identity } from "@/domain/models";
+import type { Asset, Identity } from "@/domain/models";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { generateAccessCode } from "@/lib/demo/demo-db";
 import { assertAllowed, AppError } from "./errors";
-import type { CreatedAccessCode, CreateUserInput } from "./contracts";
+import type { AttachAssetInput, CreatedAccessCode, CreateUserInput } from "./contracts";
 import { SupabaseStore } from "./supabase-store";
 
 type StudentIdentityCreationState = "prepared" | "complete" | "cleanup_pending" | "cleaned";
@@ -34,6 +35,24 @@ function operationFrom(row: Row): StudentIdentityCreationOperation {
   };
 }
 
+function assetFromRow(row: Row): Asset {
+  return {
+    id: String(row.id),
+    kind: String(row.kind) as Asset["kind"],
+    lessonId: row.lesson_id ? String(row.lesson_id) : undefined,
+    lessonPartId: row.lesson_part_id ? String(row.lesson_part_id) : undefined,
+    submissionId: row.submission_id ? String(row.submission_id) : undefined,
+    ownerStudentId: row.owner_student_id ? String(row.owner_student_id) : undefined,
+    title: String(row.title),
+    storagePath: String(row.storage_path),
+    originalFilename: String(row.original_filename),
+    mimeType: String(row.mime_type),
+    sizeBytes: Number(row.size_bytes),
+    state: String(row.state) as Asset["state"],
+    createdAt: String(row.created_at),
+  };
+}
+
 function isUniqueViolation(error: unknown) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "23505");
 }
@@ -51,14 +70,46 @@ function isDefiniteAuthCreateFailure(error: unknown) {
 }
 
 /**
- * Repair-line account adapter.
+ * Repair-line account/content adapter.
  *
  * Student identity is platform-owned. Admin creates the login identity only;
  * teachers later enroll that identity into Learning Core groups using the
- * student's private enrollment reference. No membership is created here.
+ * student's private enrollment reference. Lesson asset finalization is also
+ * routed through the retry-safe v2 database primitive.
  */
 export class RepairedSupabaseStore extends SupabaseStore {
   private repairAdmin() { return createAdminSupabaseClient(); }
+
+  override async attachAsset(identity: Identity, input: AttachAssetInput): Promise<Asset> {
+    assertAllowed(identity.role === "teacher" && identity.status === "active");
+    assertAllowed(input.kind === "video" || input.kind === "handout", "Core 1.0 يدعم فيديو MP4/WebM وملزمة PDF فقط");
+    assertAllowed(
+      (input.kind === "video" && (input.mimeType === "video/mp4" || input.mimeType === "video/webm")) ||
+      (input.kind === "handout" && input.mimeType === "application/pdf"),
+      "نوع الملف غير مدعوم في Core 1.0",
+    );
+
+    const storageProvider = input.storageProvider ?? "supabase";
+    assertAllowed(storageProvider === "demo" || storageProvider === "supabase" || storageProvider === "r2");
+    assertAllowed(input.kind !== "handout" || storageProvider !== "r2", "R2 للملزمات غير مفعل في Core 1.0");
+
+    const client = await createServerSupabaseClient();
+    const { data, error } = await client.rpc("finalize_lesson_asset_v2", {
+      p_kind: input.kind,
+      p_lesson_id: input.lessonId ?? null,
+      p_lesson_part_id: input.lessonPartId ?? null,
+      p_title: input.title,
+      p_storage_provider: storageProvider,
+      p_storage_path: input.storagePath,
+      p_original_filename: input.originalFilename,
+      p_mime_type: input.mimeType,
+      p_size_bytes: input.sizeBytes,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new AppError("تعذر اعتماد الملف", "ASSET_FINALIZE_FAILED");
+    return assetFromRow(row as Row);
+  }
 
   private async findStudentIdentityOperation(
     identity: Identity,
