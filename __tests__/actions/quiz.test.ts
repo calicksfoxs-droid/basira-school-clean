@@ -78,6 +78,32 @@ describe("submitQuizFormAction", () => {
     expect(mockRedirect).toHaveBeenCalledWith("/app/student/results/submission-1");
   });
 
+  it("preserves an explicit false answer instead of treating it as missing", async () => {
+    const formData = new FormData();
+    formData.append("quizId", "quiz-1");
+    formData.append("question_q1", "option-1");
+    formData.append("question_q2", "false");
+
+    await expect(submitQuizFormAction(formData)).rejects.toThrow("REDIRECT");
+
+    expect(mockStore.submitQuiz).toHaveBeenCalledWith(mockIdentity, "quiz-1", [
+      { questionId: "q1", selectedOptionId: "option-1" },
+      { questionId: "q2", booleanValue: false },
+    ]);
+  });
+
+  it("rejects a missing True/False answer instead of coercing it to false", async () => {
+    const formData = new FormData();
+    formData.append("quizId", "quiz-1");
+    formData.append("question_q1", "option-1");
+
+    await expect(submitQuizFormAction(formData)).rejects.toThrow("REDIRECT");
+
+    expect(mockStore.submitQuiz).not.toHaveBeenCalled();
+    expect(mockStore.voidSubmission).not.toHaveBeenCalled();
+    expect(mockRedirect).toHaveBeenCalledWith(expect.stringContaining("/app/student/quizzes/quiz-1?error="));
+  });
+
   it("rejects a legacy essay quiz before creating a Core 1.0 submission", async () => {
     mockStore.getQuiz.mockResolvedValue({
       ...objectiveQuiz,
