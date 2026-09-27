@@ -44,13 +44,13 @@ $$;
 drop trigger if exists enforce_subject_group_owner_v1 on public.groups;
 
 with unique_root_subject as (
-  select s.owner_teacher_id, min(s.id) as subject_id
+  select s.owner_teacher_id, (array_agg(s.id order by s.id))[1] as subject_id
   from public.subjects s
   where s.group_id is null and s.status <> 'archived'
   group by s.owner_teacher_id
   having count(*) = 1
 ), unique_membership_group as (
-  select g.owner_teacher_id, min(g.id) as group_id
+  select g.owner_teacher_id, (array_agg(g.id order by g.id))[1] as group_id
   from public.groups g
   where g.subject_id is null
     and g.status = 'active'
