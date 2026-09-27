@@ -7,7 +7,11 @@ import { demoUploadDir } from "@/lib/demo/demo-db";
 import { hasR2VideoStorage, isDemoBackend } from "@/lib/env";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { deleteR2Object, inspectR2Object } from "@/lib/r2-storage";
-import { verifyUploadToken } from "@/lib/upload-token";
+import {
+  drainPendingLessonAssetCleanup,
+  isReadyLessonAssetPathReferenced,
+} from "@/lib/lesson-asset-cleanup";
+import { verifyUploadToken, type UploadTokenPayload } from "@/lib/upload-token";
 
 function bucketFor(kind: "video" | "handout") {
   return kind === "video" ? "lesson-videos" : "lesson-handouts";
@@ -15,12 +19,14 @@ function bucketFor(kind: "video" | "handout") {
 
 export async function POST(request: Request) {
   let cleanup: (() => Promise<unknown>) | undefined;
+  let payload: UploadTokenPayload | null = null;
+
   try {
     const identity = await getIdentity();
     if (!identity) return NextResponse.json({ error: "انتهت الجلسة. سجّل الدخول مرة أخرى." }, { status: 401 });
     if (identity.role !== "teacher") return NextResponse.json({ error: "غير مسموح" }, { status: 403 });
-    const { token } = await request.json() as { token?: string };
-    const payload = token ? verifyUploadToken(token) : null;
+    const body = await request.json() as { token?: string };
+    payload = body.token ? verifyUploadToken(body.token) : null;
     if (!payload || payload.userId !== identity.userId || !payload.lessonId || payload.kind === "submission") {
       return NextResponse.json({ error: "جلسة الرفع غير صالحة" }, { status: 403 });
     }
@@ -54,7 +60,7 @@ export async function POST(request: Request) {
       const { data, error } = await admin.storage.from(bucket).info(payload.objectPath);
       if (error || !data) throw error ?? new Error("الملف غير موجود في التخزين");
       if (Number(data.metadata?.size ?? data.size ?? 0) !== payload.sizeBytes) throw new Error("حجم الملف المرفوع غير مطابق");
-      cleanup = () => admin.storage.from(bucket).remove([payload.objectPath]);
+      cleanup = () => admin.storage.from(bucket).remove([payload!.objectPath]);
     }
 
     const asset = await (await getStore()).attachAsset(identity, {
@@ -62,14 +68,31 @@ export async function POST(request: Request) {
       lessonId: payload.lessonPartId ? undefined : payload.lessonId,
       lessonPartId: payload.lessonPartId,
       title: payload.title,
+      storageProvider: payload.storageProvider ?? (isDemoBackend ? "demo" : "supabase"),
       storagePath: payload.objectPath,
       originalFilename: payload.originalFilename,
       mimeType: payload.mimeType,
       sizeBytes: payload.sizeBytes,
     });
+
+    // External deletion is intentionally post-commit. Failure is durable in the
+    // cleanup queue and must not turn a successful asset finalization into an
+    // error response that encourages a dangerous client retry.
+    try {
+      if (!isDemoBackend) await drainPendingLessonAssetCleanup(10);
+    } catch (cleanupError) {
+      console.error("lesson_asset_cleanup_drain_failed", cleanupError instanceof Error ? cleanupError.message : cleanupError);
+    }
+
     return NextResponse.json({ ok: true, asset });
   } catch (error) {
-    if (cleanup) await cleanup().catch(() => undefined);
+    if (cleanup && payload) {
+      let referenced = false;
+      if (!isDemoBackend && payload.storageProvider !== "demo") {
+        referenced = await isReadyLessonAssetPathReferenced(payload.objectPath).catch(() => true);
+      }
+      if (!referenced) await cleanup().catch(() => undefined);
+    }
     console.error("upload_finalize_failed", error instanceof Error ? error.message : "unknown");
     return NextResponse.json({ error: "تعذر اعتماد الملف" }, { status: 400 });
   }
