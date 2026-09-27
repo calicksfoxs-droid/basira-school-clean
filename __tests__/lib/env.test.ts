@@ -47,6 +47,17 @@ describe("Environment parsing", () => {
     expect(parsed.BASIRA_BACKEND).toBe("supabase");
   });
 
+  it("should fail in production if BASIRA_BACKEND is omitted", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const source = {
+      BASIRA_APP_SECRET: "production-test-secret-that-is-more-than-32-characters",
+    };
+
+    expect(() => parseEnv(source)).toThrow(
+      "BASIRA_BACKEND must be set explicitly in production"
+    );
+  });
+
   it("should fail in production if BASIRA_APP_SECRET is default", () => {
     vi.stubEnv("NODE_ENV", "production");
     const source = {
