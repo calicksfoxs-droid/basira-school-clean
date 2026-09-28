@@ -102,4 +102,85 @@ using (
   )
 );
 
+-- Lesson parts --------------------------------------------------------------
+drop policy if exists parts_teacher_all on public.lesson_parts;
+drop policy if exists lesson_parts_teacher_owned_v2 on public.lesson_parts;
+drop policy if exists lesson_parts_teacher_select_v3 on public.lesson_parts;
+create policy lesson_parts_teacher_select_v3
+on public.lesson_parts
+for select
+to authenticated
+using (
+  public.session_is_current()
+  and public.current_app_role()='teacher'
+  and public.teacher_owns_lesson_v2(lesson_id)
+);
+
+-- Lesson assets -------------------------------------------------------------
+-- New lesson video/handout writes finalize through upload intents. Submission
+-- assets have their own student/server path and stay read-only to teachers.
+drop policy if exists assets_teacher_all on public.lesson_assets;
+drop policy if exists lesson_assets_teacher_owned_v2 on public.lesson_assets;
+drop policy if exists lesson_assets_teacher_select_v3 on public.lesson_assets;
+create policy lesson_assets_teacher_select_v3
+on public.lesson_assets
+for select
+to authenticated
+using (
+  public.session_is_current()
+  and public.current_app_role()='teacher'
+  and kind<>'submission'
+  and public.teacher_owns_lesson_v2(
+    coalesce(
+      lesson_id,
+      (select p.lesson_id from public.lesson_parts p where p.id=lesson_assets.lesson_part_id)
+    )
+  )
+);
+
+-- Quizzes -------------------------------------------------------------------
+drop policy if exists quizzes_teacher_all on public.quizzes;
+drop policy if exists quizzes_teacher_owned_v2 on public.quizzes;
+drop policy if exists quizzes_teacher_select_v3 on public.quizzes;
+create policy quizzes_teacher_select_v3
+on public.quizzes
+for select
+to authenticated
+using (
+  public.session_is_current()
+  and public.current_app_role()='teacher'
+  and public.teacher_owns_quiz(id)
+);
+
+-- Quiz questions ------------------------------------------------------------
+drop policy if exists questions_teacher_all on public.quiz_questions;
+drop policy if exists questions_teacher_select_v3 on public.quiz_questions;
+create policy questions_teacher_select_v3
+on public.quiz_questions
+for select
+to authenticated
+using (
+  public.session_is_current()
+  and public.current_app_role()='teacher'
+  and public.teacher_owns_quiz(quiz_id)
+);
+
+-- Quiz options --------------------------------------------------------------
+drop policy if exists options_teacher_all on public.quiz_options;
+drop policy if exists options_teacher_select_v3 on public.quiz_options;
+create policy options_teacher_select_v3
+on public.quiz_options
+for select
+to authenticated
+using (
+  public.session_is_current()
+  and public.current_app_role()='teacher'
+  and exists (
+    select 1
+    from public.quiz_questions q
+    where q.id=quiz_options.question_id
+      and public.teacher_owns_quiz(q.quiz_id)
+  )
+);
+
 commit;
