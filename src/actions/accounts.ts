@@ -69,19 +69,22 @@ export async function createTeacherWithRevealAction(
   }
 }
 
+/**
+ * Backward-compatible entry point only. Student account creation is now a
+ * platform identity operation: admin-only, with no group/contact coupling.
+ * Enrollment is a separate teacher action through the Learning Core reference.
+ */
 export async function createStudentAction(formData: FormData) {
-  const path = returnPath(formData, "/app/teacher/students");
+  const path = returnPath(formData, "/app/admin/students");
   try {
-    const identity = await requireRole("admin", "teacher");
+    const identity = await requireRole("admin");
     const parsed = createUserSchema.parse({
       creationRequestId: formText(formData, "creationRequestId"),
       displayName: formText(formData, "displayName"),
-      groupId: formText(formData, "groupId") || undefined,
-      contactNumber: formText(formData, "contactNumber") || undefined,
     });
     const created = await (await getStore()).createStudent(identity, parsed);
     await setAccessCodeFlash(created.code, created.user.displayName);
-    revalidatePath("/app");
+    revalidatePath("/app/admin/students");
   } catch (error) {
     handleActionError(error, path);
   }
@@ -101,23 +104,21 @@ export type ResetAccessCodeRevealState = ActionResult<{
 }>;
 
 /**
- * Creates a student and returns the credential exactly once to the hydrated
- * form that initiated the request. The credential is never placed in a URL,
- * cookie, localStorage, or a later list response.
+ * Backward-compatible hydrated action. The boundary mirrors
+ * createStudentIdentityAction: admin creates identity only; group membership is
+ * never accepted here even if an old client submits groupId/contactNumber.
  */
 export async function createStudentWithRevealAction(
   _previousState: CreateStudentRevealState,
   formData: FormData,
 ): Promise<CreateStudentRevealState> {
-  const path = returnPath(formData, "/app/teacher/students");
+  const path = returnPath(formData, "/app/admin/students");
 
   try {
-    const identity = await requireRole("admin", "teacher");
+    const identity = await requireRole("admin");
     const parsed = createUserSchema.parse({
       creationRequestId: formText(formData, "creationRequestId"),
       displayName: formText(formData, "displayName"),
-      groupId: formText(formData, "groupId") || undefined,
-      contactNumber: formText(formData, "contactNumber") || undefined,
     });
     const created = await (await getStore()).createStudent(identity, parsed);
     revalidatePath(path);
@@ -125,7 +126,7 @@ export async function createStudentWithRevealAction(
     return {
       ok: true,
       data: { code: created.code, displayName: created.user.displayName, studentId: created.user.id },
-      message: "تم إنشاء الطالب وإصدار رمز الدخول",
+      message: "تم إنشاء هوية الطالب وإصدار رمز الدخول",
     };
   } catch (error) {
     unstable_rethrow(error);
@@ -134,7 +135,7 @@ export async function createStudentWithRevealAction(
       ok: false,
       error: error instanceof AppError
         ? error.message
-        : "تعذر إنشاء الطالب الآن. راجع البيانات وحاول مرة أخرى.",
+        : "تعذر إنشاء هوية الطالب الآن. راجع البيانات وحاول مرة أخرى.",
     };
   }
 }
@@ -201,7 +202,6 @@ export async function disableUserAction(formData: FormData) {
 
   redirectNotice(path, "تم تعطيل الحساب");
 }
-
 
 export async function reactivateUserAction(formData: FormData) {
   const path = returnPath(formData, "/app/admin");
