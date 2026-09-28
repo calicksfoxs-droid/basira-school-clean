@@ -1,6 +1,6 @@
--- Core authoring writes must pass through server ownership checks or atomic RPCs.
--- Teachers retain read access to their own curriculum graph, but direct Data API
--- INSERT/UPDATE/DELETE can no longer bypass ordering, graph, and publish invariants.
+-- Core authoring and enrollment writes must pass through server ownership checks
+-- or atomic RPCs. Teachers retain read access to their own curriculum graph and
+-- memberships, but direct Data API mutation cannot bypass domain invariants.
 
 begin;
 
@@ -28,6 +28,27 @@ using (
   public.session_is_current()
   and public.current_app_role()='teacher'
   and owner_teacher_id=auth.uid()
+);
+
+-- Memberships ---------------------------------------------------------------
+-- Enrollment is exclusively enroll_student_by_reference_v1; removal is a
+-- server-authorized service-role mutation. Direct teacher membership writes
+-- would bypass the private enrollment-reference contract.
+drop policy if exists memberships_teacher_all_own on public.group_memberships;
+drop policy if exists memberships_teacher_select_v2 on public.group_memberships;
+create policy memberships_teacher_select_v2
+on public.group_memberships
+for select
+to authenticated
+using (
+  public.session_is_current()
+  and public.current_app_role()='teacher'
+  and exists (
+    select 1
+    from public.groups g
+    where g.id=group_memberships.group_id
+      and g.owner_teacher_id=auth.uid()
+  )
 );
 
 -- Subjects ------------------------------------------------------------------
