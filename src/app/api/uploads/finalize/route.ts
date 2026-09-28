@@ -8,6 +8,7 @@ import { hasR2VideoStorage, isDemoBackend } from "@/lib/env";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { deleteR2Object, inspectR2Object } from "@/lib/r2-storage";
 import { verifyUploadToken } from "@/lib/upload-token";
+import { drainAssetStorageGarbage } from "@/lib/asset-storage-cleanup";
 
 function bucketFor(kind: "video" | "handout") {
   return kind === "video" ? "lesson-videos" : "lesson-handouts";
@@ -26,6 +27,9 @@ export async function POST(request: Request) {
     }
     if (payload.kind !== "video" && payload.kind !== "handout") {
       return NextResponse.json({ error: "نوع الملف غير مدعوم في Core 1.0" }, { status: 400 });
+    }
+    if (!isDemoBackend && !payload.uploadId) {
+      return NextResponse.json({ error: "جلسة الرفع قديمة أو غير مكتملة" }, { status: 409 });
     }
     const mimeAllowed = payload.kind === "video"
       ? payload.mimeType === "video/mp4" || payload.mimeType === "video/webm"
@@ -48,16 +52,20 @@ export async function POST(request: Request) {
       if (!info.exists) throw new Error("الملف غير موجود في R2");
       if (info.size !== payload.sizeBytes) throw new Error("حجم ملف R2 غير مطابق");
       cleanup = () => deleteR2Object(payload.objectPath);
-    } else {
+    } else if (payload.storageProvider === "supabase") {
       const bucket = bucketFor(payload.kind);
       const admin = createAdminSupabaseClient();
       const { data, error } = await admin.storage.from(bucket).info(payload.objectPath);
       if (error || !data) throw error ?? new Error("الملف غير موجود في التخزين");
       if (Number(data.metadata?.size ?? data.size ?? 0) !== payload.sizeBytes) throw new Error("حجم الملف المرفوع غير مطابق");
       cleanup = () => admin.storage.from(bucket).remove([payload.objectPath]);
+    } else {
+      throw new Error("مزود التخزين غير صالح");
     }
 
     const asset = await (await getStore()).attachAsset(identity, {
+      uploadId: payload.uploadId,
+      storageProvider: payload.storageProvider,
       kind: payload.kind,
       lessonId: payload.lessonPartId ? undefined : payload.lessonId,
       lessonPartId: payload.lessonPartId,
@@ -67,6 +75,14 @@ export async function POST(request: Request) {
       mimeType: payload.mimeType,
       sizeBytes: payload.sizeBytes,
     });
+
+    // The new asset is committed. Cleanup of replaced/abandoned objects is
+    // best-effort here because its durable obligations live in the database.
+    if (!isDemoBackend) {
+      await drainAssetStorageGarbage(20).catch((error) => {
+        console.error("asset_storage_cleanup_post_finalize_failed", error instanceof Error ? error.message : "unknown");
+      });
+    }
     return NextResponse.json({ ok: true, asset });
   } catch (error) {
     if (cleanup) await cleanup().catch(() => undefined);
