@@ -21,19 +21,29 @@ describe("teacher Core write boundary", () => {
       "subject_units_teacher_owned_v1",
       "lessons_teacher_all",
       "lessons_teacher_owned_v1",
+      "parts_teacher_all",
+      "lesson_parts_teacher_owned_v2",
+      "assets_teacher_all",
+      "lesson_assets_teacher_owned_v2",
+      "quizzes_teacher_all",
+      "quizzes_teacher_owned_v2",
+      "questions_teacher_all",
+      "options_teacher_all",
     ]) expect(sql).toContain(`drop policy if exists ${legacy}`);
 
-    expect(sql.match(/for select/g)?.length).toBe(6);
+    expect(sql.match(/for select/g)?.length).toBe(11);
     expect(sql).toContain("public.session_is_current()");
     expect(sql).toContain("public.current_app_role()='teacher'");
     expect(sql).not.toMatch(/for\s+(insert|update|delete|all)\s+to\s+authenticated/i);
   });
 
-  it("keeps graph and membership reads scoped to the authenticated teacher", async () => {
+  it("keeps graph, assets, quizzes, and membership reads teacher-scoped", async () => {
     const sql = await migration();
     expect(sql).toContain("owner_teacher_id=auth.uid()");
     expect(sql).toContain("s.owner_teacher_id=auth.uid()");
     expect(sql).toContain("g.owner_teacher_id=auth.uid()");
+    expect(sql).toContain("public.teacher_owns_lesson_v2");
+    expect(sql).toContain("public.teacher_owns_quiz");
     expect(sql).toContain("enroll_student_by_reference_v1");
   });
 });
