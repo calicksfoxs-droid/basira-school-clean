@@ -4,6 +4,7 @@ export type GroupState = "active" | "disabled" | "archived";
 export type ContentState = "draft" | "published";
 export type StructureMode = "direct" | "parts";
 export type AssetState = "uploading" | "verifying" | "ready" | "failed" | "removed";
+export type AssetStorageProvider = "demo" | "supabase" | "r2" | "legacy_unknown";
 export type QuestionType = "mcq" | "true_false" | "essay_text" | "essay_file";
 export type SubmissionState = "submitted" | "pending_review" | "graded" | "released" | "void";
 
@@ -110,6 +111,7 @@ export interface Asset {
   ownerStudentId?: string;
   title: string;
   storagePath: string;
+  storageProvider?: AssetStorageProvider;
   originalFilename: string;
   mimeType: string;
   sizeBytes: number;
