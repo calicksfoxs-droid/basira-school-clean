@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/lib/env";
 
 export interface UploadTokenPayload {
+  uploadId?: string;
   userId: string;
   kind: "video" | "handout" | "aid" | "submission";
   storageProvider?: "demo" | "supabase" | "r2";
