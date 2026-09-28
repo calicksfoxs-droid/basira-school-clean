@@ -4,6 +4,8 @@ import { getIdentity } from "@/lib/auth";
 import { env, isDemoBackend } from "@/lib/env";
 import { getStore } from "@/lib/data";
 import { createUploadToken } from "@/lib/upload-token";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { drainAssetStorageGarbage } from "@/lib/asset-storage-cleanup";
 
 const allowedVideo = new Set(["video/mp4", "video/webm"]);
 export async function POST(request: Request) {
@@ -31,7 +33,29 @@ export async function POST(request: Request) {
       : body.kind === "video" && env.VIDEO_STORAGE_PROVIDER === "r2"
         ? "r2"
         : "supabase";
+    const uploadId = randomUUID();
+    const expiresAt = Date.now() + 20 * 60 * 1000;
+
+    if (!isDemoBackend) {
+      // Opportunistically drain recoverable garbage before allocating a new
+      // upload. Failure here must not block a legitimate authoring action.
+      await drainAssetStorageGarbage(10).catch((error) => {
+        console.error("asset_storage_cleanup_opportunistic_failed", error instanceof Error ? error.message : "unknown");
+      });
+
+      const { error } = await createAdminSupabaseClient().rpc("register_asset_upload_intent_v1", {
+        p_id: uploadId,
+        p_user_id: identity.userId,
+        p_storage_provider: storageProvider,
+        p_kind: body.kind,
+        p_object_path: objectPath,
+        p_expires_at: new Date(expiresAt).toISOString(),
+      });
+      if (error) throw error;
+    }
+
     const token = createUploadToken({
+      uploadId,
       userId: identity.userId,
       kind: body.kind,
       storageProvider,
@@ -42,7 +66,7 @@ export async function POST(request: Request) {
       mimeType: body.mimeType,
       sizeBytes: body.sizeBytes,
       title: body.title || body.fileName,
-      exp: Date.now() + 20 * 60 * 1000,
+      exp: expiresAt,
     });
     const storageUrl = storageProvider === "supabase" && env.NEXT_PUBLIC_SUPABASE_URL
       ? env.NEXT_PUBLIC_SUPABASE_URL.replace(".supabase.co", ".storage.supabase.co")
