@@ -1,0 +1,142 @@
+name: TestSprite BASIRA Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Repository ref containing the BASIRA version and TestSprite plan"
+        required: true
+        default: "release/core-1.0-reset-v2"
+        type: string
+      target_url:
+        description: "BASIRA deployment URL to test"
+        required: true
+        default: "https://basira-school-clean.calicksfoxs.workers.dev"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  testsprite-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+      TESTSPRITE_NO_UPDATE_NOTIFIER: "1"
+      TARGET_URL: ${{ inputs.target_url }}
+      TESTSPRITE_PROJECT_NAME: "BASIRA Core 1.0"
+
+    steps:
+      - name: Checkout BASIRA source ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Require TestSprite credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TESTSPRITE_API_KEY:-}" ]; then
+            echo "TESTSPRITE_API_KEY is missing. Add it as a GitHub Actions secret before running this workflow."
+            exit 1
+          fi
+
+      - name: Install TestSprite CLI
+        run: npm install -g @testsprite/testsprite-cli@0.4.0
+
+      - name: Authenticate and diagnose
+        shell: bash
+        run: |
+          set -euo pipefail
+          testsprite setup --from-env --yes --agent codex
+          testsprite doctor --output json
+
+      - name: Resolve or create BASIRA TestSprite project
+        id: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          testsprite project list --output json > /tmp/testsprite-projects.json
+
+          PROJECT_ID="$(node <<'NODE'
+          const fs = require('fs');
+          const payload = JSON.parse(fs.readFileSync('/tmp/testsprite-projects.json', 'utf8'));
+          const candidates = Array.isArray(payload) ? payload
+            : payload.items ?? payload.projects ?? payload.data?.items ?? payload.data?.projects ?? payload.data ?? [];
+          const rows = Array.isArray(candidates) ? candidates : [];
+          const match = rows.find((p) => p && p.name === process.env.TESTSPRITE_PROJECT_NAME);
+          process.stdout.write(match?.id ?? match?.projectId ?? '');
+          NODE
+          )"
+
+          if [ -z "$PROJECT_ID" ]; then
+            testsprite project create \
+              --type frontend \
+              --name "$TESTSPRITE_PROJECT_NAME" \
+              --url "$TARGET_URL" \
+              --output json > /tmp/testsprite-project-create.json
+
+            PROJECT_ID="$(node <<'NODE'
+          const fs = require('fs');
+          const payload = JSON.parse(fs.readFileSync('/tmp/testsprite-project-create.json', 'utf8'));
+          const project = payload.project ?? payload.data?.project ?? payload.data ?? payload;
+          process.stdout.write(project?.id ?? project?.projectId ?? payload.projectId ?? '');
+          NODE
+            )"
+          else
+            testsprite project update "$PROJECT_ID" --url "$TARGET_URL" --output json > /tmp/testsprite-project-update.json
+          fi
+
+          if [ -z "$PROJECT_ID" ]; then
+            echo "Could not resolve the TestSprite project id."
+            exit 1
+          fi
+
+          echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
+          echo "Resolved TestSprite project: $PROJECT_ID"
+
+      - name: Materialize read-only smoke plan
+        env:
+          TESTSPRITE_PROJECT_ID: ${{ steps.project.outputs.project_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const source = '.testsprite/basira-core1-readonly.plan.template.json';
+          const target = '.testsprite/basira-core1-readonly.plan.json';
+          const projectId = process.env.TESTSPRITE_PROJECT_ID;
+          if (!projectId) throw new Error('TESTSPRITE_PROJECT_ID is missing');
+          const text = fs.readFileSync(source, 'utf8').replaceAll('__TESTSPRITE_PROJECT_ID__', projectId);
+          JSON.parse(text);
+          fs.writeFileSync(target, text);
+          NODE
+
+      - name: Run TestSprite read-only BASIRA smoke
+        env:
+          TESTSPRITE_PROJECT_ID: ${{ steps.project.outputs.project_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          testsprite test create \
+            --project "$TESTSPRITE_PROJECT_ID" \
+            --type frontend \
+            --plan-from .testsprite/basira-core1-readonly.plan.json \
+            --run \
+            --wait \
+            --timeout 600 \
+            --output json | tee testsprite-result.json
+
+      - name: Upload TestSprite result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testsprite-basira-smoke
+          path: testsprite-result.json
+          if-no-files-found: ignore
