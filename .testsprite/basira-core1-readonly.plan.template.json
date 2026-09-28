@@ -1,0 +1,40 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.4.0/schemas/plan.schema.json",
+  "projectId": "__TESTSPRITE_PROJECT_ID__",
+  "type": "frontend",
+  "name": "BASIRA Core 1.0 public smoke stays healthy without mutating data",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Open /login on the configured BASIRA target. Do not submit valid credentials and do not create, update, publish, enroll, upload, or delete any data."
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the Arabic RTL login experience renders successfully with the BASIRA name بصيرة, the heading مرحبًا بعودتك, an access-code field, and a دخول button, without a fatal server error or broken critical layout."
+    },
+    {
+      "type": "action",
+      "description": "Open /api/health?deep=1 on the same BASIRA deployment."
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the health response reports ok=true, backend=supabase, and database=ready."
+    },
+    {
+      "type": "action",
+      "description": "Open the protected route /app/student while unauthenticated."
+    },
+    {
+      "type": "assertion",
+      "description": "Verify protected student content is not exposed and the visitor is returned to the login experience or otherwise denied access safely."
+    },
+    {
+      "type": "action",
+      "description": "Return to /login and inspect the page at both desktop and mobile-sized viewports without entering a valid access code."
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the login experience remains usable, Arabic-first, RTL, and free of obvious horizontal overflow, missing critical controls, or fatal rendering errors."
+    }
+  ]
+}
