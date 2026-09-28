@@ -15,6 +15,7 @@ describe("teacher Core write boundary", () => {
     for (const legacy of [
       "curriculum_grades_teacher_owned_v1",
       "groups_teacher_all_own",
+      "memberships_teacher_all_own",
       "subjects_teacher_all",
       "subjects_teacher_owned_v1",
       "subject_units_teacher_owned_v1",
@@ -22,15 +23,17 @@ describe("teacher Core write boundary", () => {
       "lessons_teacher_owned_v1",
     ]) expect(sql).toContain(`drop policy if exists ${legacy}`);
 
-    expect(sql.match(/for select/g)?.length).toBe(5);
+    expect(sql.match(/for select/g)?.length).toBe(6);
     expect(sql).toContain("public.session_is_current()");
     expect(sql).toContain("public.current_app_role()='teacher'");
     expect(sql).not.toMatch(/for\s+(insert|update|delete|all)\s+to\s+authenticated/i);
   });
 
-  it("keeps ownership scoped to the authenticated teacher", async () => {
+  it("keeps graph and membership reads scoped to the authenticated teacher", async () => {
     const sql = await migration();
     expect(sql).toContain("owner_teacher_id=auth.uid()");
     expect(sql).toContain("s.owner_teacher_id=auth.uid()");
+    expect(sql).toContain("g.owner_teacher_id=auth.uid()");
+    expect(sql).toContain("enroll_student_by_reference_v1");
   });
 });
