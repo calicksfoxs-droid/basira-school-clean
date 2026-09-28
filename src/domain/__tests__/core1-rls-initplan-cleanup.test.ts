@@ -23,7 +23,7 @@ describe("Core 1 RLS init-plan cleanup", () => {
   it("caches auth.uid and scopes user-facing policies to authenticated", async () => {
     const sql = await migration();
     expect(sql.match(/\(select auth\.uid\(\)\)/g)?.length).toBeGreaterThanOrEqual(9);
-    expect(sql.match(/to authenticated/g)?.length).toBe(7);
+    expect(sql.match(/create policy[\s\S]*?to authenticated/gi)?.length).toBe(7);
     expect(sql).toContain("public.session_is_current()");
     expect(sql).toContain("public.owns_group(group_id)");
   });
