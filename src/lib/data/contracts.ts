@@ -1,6 +1,7 @@
 import type {
   Announcement,
   Asset,
+  AssetStorageProvider,
   DashboardSummary,
   Group,
   GroupDetails,
@@ -46,6 +47,12 @@ export interface SubmitAnswerInput {
   fileAssetId?: string;
 }
 
+export type LessonAssetFinalizeInput = Omit<Asset, "id" | "createdAt" | "state"> & {
+  state?: Asset["state"];
+  uploadId?: string;
+  storageProvider?: AssetStorageProvider;
+};
+
 export interface BasiraStore {
   getDashboard(identity: Identity): Promise<DashboardSummary>;
   listUsers(identity: Identity, role?: Role): Promise<UserRecord[]>;
@@ -69,7 +76,7 @@ export interface BasiraStore {
   getLesson(identity: Identity, lessonId: string): Promise<LessonDetails>;
   publishLesson(identity: Identity, lessonId: string): Promise<void>;
 
-  attachAsset(identity: Identity, input: Omit<Asset, "id" | "createdAt" | "state"> & { state?: Asset["state"] }): Promise<Asset>;
+  attachAsset(identity: Identity, input: LessonAssetFinalizeInput): Promise<Asset>;
   getAsset(identity: Identity, assetId: string): Promise<Asset>;
 
   createQuiz(identity: Identity, input: { lessonId?: string; lessonPartId?: string; title: string; instructions?: string; questions: CreateQuestionInput[] }): Promise<string>;
