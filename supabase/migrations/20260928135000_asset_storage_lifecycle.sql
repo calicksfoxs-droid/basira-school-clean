@@ -22,7 +22,11 @@ create table if not exists private.asset_upload_intents_v1 (
   user_id uuid not null references public.profiles(id),
   storage_provider text not null check (storage_provider in ('supabase','r2')),
   kind text not null check (kind in ('video','handout')),
+  lesson_id uuid references public.lessons(id) on delete cascade,
+  lesson_part_id uuid references public.lesson_parts(id) on delete cascade,
   object_path text not null,
+  mime_type text not null,
+  size_bytes bigint not null check (size_bytes > 0),
   state text not null default 'pending'
     check (state in ('pending','cleaning','finalized','cleaned')),
   expires_at timestamptz not null,
@@ -31,6 +35,7 @@ create table if not exists private.asset_upload_intents_v1 (
   created_at timestamptz not null default now(),
   finalized_at timestamptz,
   cleaned_at timestamptz,
+  check (((lesson_id is not null)::int + (lesson_part_id is not null)::int) = 1),
   unique(storage_provider, object_path)
 );
 
@@ -65,7 +70,11 @@ create or replace function public.register_asset_upload_intent_v1(
   p_user_id uuid,
   p_storage_provider text,
   p_kind text,
+  p_lesson_id uuid,
+  p_lesson_part_id uuid,
   p_object_path text,
+  p_mime_type text,
+  p_size_bytes bigint,
   p_expires_at timestamptz
 )
 returns uuid
@@ -76,10 +85,22 @@ as $$
 begin
   if p_storage_provider not in ('supabase','r2')
      or p_kind not in ('video','handout')
+     or p_size_bytes <= 0
+     or ((p_lesson_id is not null)::int + (p_lesson_part_id is not null)::int) <> 1
      or p_expires_at <= now()
      or p_expires_at > now() + interval '30 minutes'
   then
     raise exception 'Invalid upload intent';
+  end if;
+
+  if p_kind='handout' and p_storage_provider<>'supabase' then
+    raise exception 'Invalid handout provider';
+  end if;
+  if p_kind='handout' and p_mime_type<>'application/pdf' then
+    raise exception 'Invalid handout MIME type';
+  end if;
+  if p_kind='video' and p_mime_type not in ('video/mp4','video/webm') then
+    raise exception 'Invalid video MIME type';
   end if;
 
   if not exists (
@@ -90,18 +111,20 @@ begin
   end if;
 
   insert into private.asset_upload_intents_v1(
-    id,user_id,storage_provider,kind,object_path,expires_at,state
+    id,user_id,storage_provider,kind,lesson_id,lesson_part_id,object_path,
+    mime_type,size_bytes,expires_at,state
   ) values (
-    p_id,p_user_id,p_storage_provider,p_kind,p_object_path,p_expires_at,'pending'
+    p_id,p_user_id,p_storage_provider,p_kind,p_lesson_id,p_lesson_part_id,
+    p_object_path,p_mime_type,p_size_bytes,p_expires_at,'pending'
   );
 
   return p_id;
 end;
 $$;
 
-revoke all on function public.register_asset_upload_intent_v1(uuid,uuid,text,text,text,timestamptz)
+revoke all on function public.register_asset_upload_intent_v1(uuid,uuid,text,text,uuid,uuid,text,text,bigint,timestamptz)
   from public,anon,authenticated;
-grant execute on function public.register_asset_upload_intent_v1(uuid,uuid,text,text,text,timestamptz)
+grant execute on function public.register_asset_upload_intent_v1(uuid,uuid,text,text,uuid,uuid,text,text,bigint,timestamptz)
   to service_role;
 
 create or replace function public.finalize_lesson_asset_v2(
@@ -146,14 +169,30 @@ begin
   for update;
 
   if not found
-     or v_intent.state<>'pending'
-     or v_intent.expires_at < now()
      or v_intent.user_id is distinct from auth.uid()
      or v_intent.storage_provider is distinct from p_storage_provider
      or v_intent.kind is distinct from p_kind
+     or v_intent.lesson_id is distinct from p_lesson_id
+     or v_intent.lesson_part_id is distinct from p_lesson_part_id
      or v_intent.object_path is distinct from p_storage_path
+     or v_intent.mime_type is distinct from p_mime_type
+     or v_intent.size_bytes is distinct from p_size_bytes
   then
     raise exception 'Invalid upload intent';
+  end if;
+
+  -- Retrying the same finalized request is safe: return the exact committed
+  -- asset and never queue/delete it as its own replacement.
+  if v_intent.state='finalized' and v_intent.finalized_asset_id is not null then
+    select a.* into v_asset
+    from public.lesson_assets a
+    where a.id=v_intent.finalized_asset_id;
+    if not found then raise exception 'Finalized upload asset is missing'; end if;
+    return v_asset;
+  end if;
+
+  if v_intent.state<>'pending' or v_intent.expires_at < now() then
+    raise exception 'Upload intent is not finalizable';
   end if;
 
   if p_lesson_part_id is not null then
@@ -178,9 +217,6 @@ begin
     raise exception 'Invalid storage scope';
   end if;
 
-  -- Queue physical cleanup before marking the previous row removed. The queue
-  -- and the new ready row commit together, so a process crash cannot lose the
-  -- cleanup obligation.
   insert into private.asset_storage_cleanup_jobs_v1(
     asset_id,storage_provider,kind,storage_path,state
   )
