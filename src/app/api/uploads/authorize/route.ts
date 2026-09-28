@@ -37,8 +37,6 @@ export async function POST(request: Request) {
     const expiresAt = Date.now() + 20 * 60 * 1000;
 
     if (!isDemoBackend) {
-      // Opportunistically drain recoverable garbage before allocating a new
-      // upload. Failure here must not block a legitimate authoring action.
       await drainAssetStorageGarbage(10).catch((error) => {
         console.error("asset_storage_cleanup_opportunistic_failed", error instanceof Error ? error.message : "unknown");
       });
@@ -48,7 +46,11 @@ export async function POST(request: Request) {
         p_user_id: identity.userId,
         p_storage_provider: storageProvider,
         p_kind: body.kind,
+        p_lesson_id: body.lessonPartId ? null : body.lessonId,
+        p_lesson_part_id: body.lessonPartId ?? null,
         p_object_path: objectPath,
+        p_mime_type: body.mimeType,
+        p_size_bytes: body.sizeBytes,
         p_expires_at: new Date(expiresAt).toISOString(),
       });
       if (error) throw error;
