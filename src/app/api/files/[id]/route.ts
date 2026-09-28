@@ -23,15 +23,39 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       const buffer = await readFile(path.join(demoUploadDir(), asset.storagePath));
       return new NextResponse(buffer, { headers: { "content-type": asset.mimeType, "content-disposition": `${asset.kind === "video" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(asset.originalFilename)}`, "cache-control": "private, no-store" } });
     }
+
+    const supabase = await createServerSupabaseClient();
+    const { data: providerRow, error: providerError } = await supabase
+      .from("lesson_assets")
+      .select("storage_provider")
+      .eq("id", asset.id)
+      .eq("state", "ready")
+      .maybeSingle();
+    if (providerError) throw providerError;
+    const provider = providerRow?.storage_provider ? String(providerRow.storage_provider) : undefined;
+
+    if (provider === "r2") {
+      if (asset.kind !== "video" || !hasR2VideoStorage()) throw new Error("R2 asset provider is unavailable");
+      const object = await inspectR2Object(asset.storagePath);
+      if (!object.exists) throw new Error("R2 object is missing");
+      return NextResponse.redirect(createR2PresignedUrl("GET", asset.storagePath, 60));
+    }
+
+    if (provider === "supabase") {
+      const bucket = asset.kind === "video" ? "lesson-videos" : "lesson-handouts";
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(asset.storagePath, 60);
+      if (error) throw error;
+      return NextResponse.redirect(data.signedUrl);
+    }
+
+    // Transitional read path for assets created before storage_provider was
+    // persisted. No new asset should reach this branch after lifecycle v2 is live.
     if (asset.kind === "video" && hasR2VideoStorage()) {
       const object = await inspectR2Object(asset.storagePath);
-      if (object.exists) {
-        return NextResponse.redirect(createR2PresignedUrl("GET", asset.storagePath, 60));
-      }
+      if (object.exists) return NextResponse.redirect(createR2PresignedUrl("GET", asset.storagePath, 60));
     }
-    const bucket = asset.kind === "video" ? "lesson-videos" : "lesson-handouts";
-    const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(asset.storagePath, 60);
+    const legacyBucket = asset.kind === "video" ? "lesson-videos" : "lesson-handouts";
+    const { data, error } = await supabase.storage.from(legacyBucket).createSignedUrl(asset.storagePath, 60);
     if (error) throw error;
     return NextResponse.redirect(data.signedUrl);
   } catch { return NextResponse.json({ error: "الملف غير متاح" }, { status: 404 }); }
