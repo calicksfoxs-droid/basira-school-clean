@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createLearningSubjectSchema,
   enrollStudentSchema,
+  platformSettingsSchema,
   updateSubjectBannerSchema,
   updateSubjectMetadataSchema,
   updateSubjectCoverSchema,
@@ -37,6 +38,12 @@ describe("Basira core schemas", () => {
     const groupId = "10000000-0000-4000-8000-000000000001";
     expect(enrollStudentSchema.parse({ groupId, enrollmentReference: "bsr-s-abcd2345wxyz" }).enrollmentReference).toBe("BSR-S-ABCD2345WXYZ");
     expect(enrollStudentSchema.safeParse({ groupId, enrollmentReference: "BSR-STDN-DEMO2026" }).success).toBe(false);
+  });
+
+  it("requires a valid IANA timezone for platform settings", () => {
+    expect(platformSettingsSchema.safeParse({ platformName: "بصيرة", timezone: "Asia/Qatar", maintenanceMessage: "صيانة قصيرة" }).success).toBe(true);
+    expect(platformSettingsSchema.safeParse({ platformName: "بصيرة", timezone: "Asia/Riyadh" }).success).toBe(true);
+    expect(platformSettingsSchema.safeParse({ platformName: "بصيرة", timezone: "Doha/Qatar/Invalid" }).success).toBe(false);
   });
 
   it("keeps V1 preferences intentionally small", () => {
