@@ -97,6 +97,16 @@ export async function getCanonicalDashboardData(identity: Identity): Promise<Can
   const journey = identity.role === "student" && subjects[0]
     ? await core.getLearningJourney(identity, subjects[0].id)
     : [];
+  const availableLessonId = identity.role === "student"
+    ? journey.find((node) => node.state === "available")?.lessonId
+    : undefined;
+  const dashboardLessons = availableLessonId
+    ? [...allLessons].sort((left, right) => {
+        if (left.id === availableLessonId) return -1;
+        if (right.id === availableLessonId) return 1;
+        return lessonTimestamp(right).localeCompare(lessonTimestamp(left));
+      })
+    : allLessons;
 
   return {
     subjects,
@@ -107,7 +117,7 @@ export async function getCanonicalDashboardData(identity: Identity): Promise<Can
       counts,
       // Dashboard consumers no longer receive the legacy Group projection.
       groups: [],
-      latestLessons: allLessons,
+      latestLessons: dashboardLessons,
       pendingSubmissions,
       releasedSubmissions,
     },
