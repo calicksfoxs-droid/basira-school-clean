@@ -1,0 +1,46 @@
+name: Dependency Audit
+
+on:
+  push:
+    branches:
+      - release/core-1.0-reset-v2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Audit JSON
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > npm-audit.json
+          status=$?
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
+          const meta = report.metadata?.vulnerabilities ?? {};
+          console.log('VULNERABILITY_COUNTS=' + JSON.stringify(meta));
+          for (const [name, item] of Object.entries(report.vulnerabilities ?? {})) {
+            const via = Array.isArray(item.via) ? item.via.map(v => typeof v === 'string' ? v : ({source:v.source,title:v.title,severity:v.severity,range:v.range,url:v.url}))) : item.via;
+            console.log(JSON.stringify({name,severity:item.severity,isDirect:item.isDirect,range:item.range,fixAvailable:item.fixAvailable,nodes:item.nodes,via}));
+          }
+          NODE
+          exit 0
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-json
+          path: npm-audit.json
