@@ -13,6 +13,10 @@ jobs:
   repair-verify:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      BASIRA_BACKEND: demo
+      BASIRA_APP_SECRET: dependency-repair-verification-secret-2026
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,12 +25,11 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Refresh lockfile and apply non-breaking audit fixes
+      - name: Refresh lockfile
         shell: bash
         run: |
           set -euo pipefail
           npm install --package-lock-only --ignore-scripts
-          npm audit fix --package-lock-only --ignore-scripts || true
       - name: Clean install
         run: npm ci
       - name: Audit after repair
@@ -37,7 +40,8 @@ jobs:
           node <<'NODE'
           const fs = require('fs');
           const report = JSON.parse(fs.readFileSync('audit-after.json', 'utf8'));
-          console.log('VULNERABILITY_COUNTS=' + JSON.stringify(report.metadata?.vulnerabilities ?? {}));
+          const counts = report.metadata?.vulnerabilities ?? {};
+          console.log('VULNERABILITY_COUNTS=' + JSON.stringify(counts));
           for (const [name, item] of Object.entries(report.vulnerabilities ?? {})) {
             console.log(JSON.stringify({
               name,
@@ -48,7 +52,13 @@ jobs:
               via: item.via
             }));
           }
+          if ((counts.high ?? 0) > 0 || (counts.critical ?? 0) > 0) process.exitCode = 2;
           NODE
+          audit_status=$?
+          if [ "$audit_status" -eq 2 ]; then
+            echo "High/critical vulnerabilities remain after the safe repair."
+            exit 2
+          fi
           exit 0
       - name: Verify project
         run: npm run verify
