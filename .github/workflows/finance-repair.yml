@@ -1,0 +1,33 @@
+name: Teacher Finance Repair Verification
+
+on:
+  push:
+    branches:
+      - repair/teacher-finance-db-20260929
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASIRA_BACKEND: demo
+      BASIRA_APP_SECRET: finance-repair-verification-secret-2026
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+      - name: Verify finance repair
+        run: npm run verify
