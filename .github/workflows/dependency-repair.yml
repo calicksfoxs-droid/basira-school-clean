@@ -25,10 +25,13 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Use current npm 11
+        run: npm install --global npm@11.20.0
       - name: Refresh lockfile
         shell: bash
         run: |
           set -euo pipefail
+          npm --version
           npm install --package-lock-only --ignore-scripts
       - name: Clean install
         run: npm ci
