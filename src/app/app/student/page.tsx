@@ -1,16 +1,19 @@
 import { DashboardHome } from "@/components/dashboard/home";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { requireRole } from "@/lib/auth";
-import { getStore } from "@/lib/data";
-import { getLearningCoreStore } from "@/lib/core";
+import { getCanonicalDashboardData } from "@/lib/dashboard/canonical-dashboard";
 
 export default async function Page() {
   const identity = await requireRole("student");
-  const core = getLearningCoreStore();
-  const [summary, subjects, grades] = await Promise.all([
-    (await getStore()).getDashboard(identity),
-    core.listLearningSubjects(identity),
-    core.listCurriculumGrades(identity),
-  ]);
-  const journey = subjects[0] ? await core.getLearningJourney(identity, subjects[0].id) : [];
+  const { summary, subjects, grades, journey } = await getCanonicalDashboardData(identity);
+
+  if (!subjects.length) {
+    return <>
+      <PageHeader title={`مرحبًا، ${identity.displayName.split(" ")[0]}`} description="ستظهر موادك هنا بعد إتاحة أول مادة تعليمية لك."/>
+      <EmptyState title="لا توجد مواد متاحة بعد" description="عند نشر وإتاحة مادة لك ستظهر هنا مباشرة."/>
+    </>;
+  }
+
   return <DashboardHome identity={identity} summary={summary} subjects={subjects} grades={grades} journey={journey}/>;
 }
