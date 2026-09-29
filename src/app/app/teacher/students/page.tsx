@@ -1,4 +1,5 @@
 import { enrollExistingStudentFormAction, removeStudentMembershipFormAction } from "@/actions/learning-core";
+import { TeacherFinanceNoteEditor } from "@/components/students/teacher-finance-note";
 import { UserTable } from "@/components/users/user-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -8,14 +9,16 @@ import { Notice } from "@/components/ui/notice";
 import { requireRole } from "@/lib/auth";
 import { getStore } from "@/lib/data";
 import { getLearningCoreStore } from "@/lib/core";
+import { listTeacherPrivateEnrollmentRecords } from "@/lib/teacher-private-records";
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ notice?: string; error?: string }> }) {
   const identity = await requireRole("teacher");
   const store = await getStore();
   const core = getLearningCoreStore();
-  const [users, subjects] = await Promise.all([
+  const [users, subjects, privateEnrollments] = await Promise.all([
     store.listUsers(identity, "student"),
     core.listLearningSubjects(identity),
+    listTeacherPrivateEnrollmentRecords(identity),
   ]);
   const subjectDetails = await Promise.all(subjects.map((subject) => core.getLearningSubject(identity, subject.id)));
   const learningGroups = subjectDetails
@@ -27,7 +30,28 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ n
     <PageHeader title="طلابي" description="أضف حسابًا موجودًا إلى مجموعتك باستخدام معرّف الانضمام الخاص بالطالب."/>
     <Notice {...params}/>
     <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-      <UserTable users={users} returnTo="/app/teacher/students"/>
+      <div className="grid content-start gap-6">
+        <UserTable users={users} returnTo="/app/teacher/students"/>
+        <Card>
+          <CardTitle>متابعة خاصة بالمعلم</CardTitle>
+          <CardDescription>المبلغ والحالة وملاحظات الدفع محفوظة في بصيرة وتبقى خاصة بالمعلم. لا تظهر للطالب أو الإدارة.</CardDescription>
+          <div className="mt-5 grid gap-4">
+            {privateEnrollments.length ? privateEnrollments.map((record) => <div key={`${record.groupId}:${record.studentId}`} className="rounded-2xl border border-[var(--border)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div><p className="font-black">{record.studentName}</p><p className="mt-1 text-xs text-[var(--muted)]">{record.groupName}</p></div>
+                {record.contactNumber && <span className="text-xs text-[var(--muted)]" dir="ltr">{record.contactNumber}</span>}
+              </div>
+              <TeacherFinanceNoteEditor
+                groupId={record.groupId}
+                studentId={record.studentId}
+                amountNote={record.amountNote}
+                paymentNote={record.paymentNote}
+                returnTo="/app/teacher/students"
+              />
+            </div>) : <p className="text-sm text-[var(--muted)]">لا توجد تسجيلات طلاب نشطة لإضافة ملاحظات خاصة عليها.</p>}
+          </div>
+        </Card>
+      </div>
       <div className="grid content-start gap-6">
         <Card>
           <CardTitle>إضافة طالب إلى مجموعة</CardTitle>
