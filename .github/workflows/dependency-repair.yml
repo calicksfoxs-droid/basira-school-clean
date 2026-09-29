@@ -1,0 +1,64 @@
+name: Dependency Repair Verification
+
+on:
+  push:
+    branches:
+      - repair/dependency-audit-fixes-20260929
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Refresh lockfile and apply non-breaking audit fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts
+          npm audit fix --package-lock-only --ignore-scripts || true
+      - name: Clean install
+        run: npm ci
+      - name: Audit after repair
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > audit-after.json
+          node <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('audit-after.json', 'utf8'));
+          console.log('VULNERABILITY_COUNTS=' + JSON.stringify(report.metadata?.vulnerabilities ?? {}));
+          for (const [name, item] of Object.entries(report.vulnerabilities ?? {})) {
+            console.log(JSON.stringify({
+              name,
+              severity: item.severity,
+              isDirect: item.isDirect,
+              range: item.range,
+              fixAvailable: item.fixAvailable,
+              via: item.via
+            }));
+          }
+          NODE
+          exit 0
+      - name: Verify project
+        run: npm run verify
+      - name: Upload repaired dependency files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-repair-output
+          path: |
+            package.json
+            package-lock.json
+            audit-after.json
+          if-no-files-found: error
