@@ -27,20 +27,43 @@ jobs:
         run: |
           set +e
           npm audit --json > npm-audit.json
-          status=$?
-          node - <<'NODE'
+          node <<'NODE'
           const fs = require('fs');
           const report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
-          const meta = report.metadata?.vulnerabilities ?? {};
-          console.log('VULNERABILITY_COUNTS=' + JSON.stringify(meta));
+          const counts = report.metadata?.vulnerabilities ?? {};
+          console.log('VULNERABILITY_COUNTS=' + JSON.stringify(counts));
           for (const [name, item] of Object.entries(report.vulnerabilities ?? {})) {
-            const via = Array.isArray(item.via) ? item.via.map(v => typeof v === 'string' ? v : ({source:v.source,title:v.title,severity:v.severity,range:v.range,url:v.url}))) : item.via;
-            console.log(JSON.stringify({name,severity:item.severity,isDirect:item.isDirect,range:item.range,fixAvailable:item.fixAvailable,nodes:item.nodes,via}));
+            const via = Array.isArray(item.via)
+              ? item.via.map((v) => typeof v === 'string' ? v : ({
+                  source: v.source,
+                  title: v.title,
+                  severity: v.severity,
+                  range: v.range,
+                  url: v.url,
+                }))
+              : item.via;
+            console.log(JSON.stringify({
+              name,
+              severity: item.severity,
+              isDirect: item.isDirect,
+              range: item.range,
+              fixAvailable: item.fixAvailable,
+              nodes: item.nodes,
+              via,
+            }));
           }
+          if ((counts.high ?? 0) > 0 || (counts.critical ?? 0) > 0) process.exitCode = 2;
           NODE
+          audit_status=$?
+          if [ "$audit_status" -eq 2 ]; then
+            echo "High/critical dependency vulnerabilities detected."
+            exit 2
+          fi
           exit 0
       - name: Upload audit report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: npm-audit-json
           path: npm-audit.json
+          if-no-files-found: error
