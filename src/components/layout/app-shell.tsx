@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, BookOpen, ClipboardCheck, Compass, GraduationCap, Home, LogOut, Megaphone, School, Settings, Users } from "lucide-react";
+import { Bell, BookOpen, ClipboardCheck, Compass, GraduationCap, Home, LogOut, Megaphone, School, Settings, Users, Wrench } from "lucide-react";
 import type { Identity } from "@/domain/models";
 import type { UserPreferences } from "@/domain/core-models";
 import { Sidebar, type NavIconName, type NavItem } from "./sidebar";
@@ -37,10 +37,11 @@ function nav(identity: Identity): NavItem[] {
 
 const icons = { home: Home, teachers: GraduationCap, users: Users, school: School, announcements: Megaphone, grading: ClipboardCheck, subjects: BookOpen, journey: Compass, settings: Settings } satisfies Record<NavIconName, typeof Home>;
 
-export function AppShell({ identity, preferences, platformName, children }: { identity: Identity; preferences: UserPreferences; platformName: string; children: React.ReactNode }) {
+export function AppShell({ identity, preferences, platformName, maintenanceMessage, children }: { identity: Identity; preferences: UserPreferences; platformName: string; maintenanceMessage?: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const items = nav(identity);
   const mobileItems = items.filter((item) => item.mobile).slice(0, 4);
+  const maintenance = maintenanceMessage?.trim();
   return <div className="app-shell min-h-screen lg:flex" data-theme={preferences.theme} data-reduced-motion={preferences.reducedMotion ? "true" : "false"}>
     <a href="#main-content" className="skip-link">تجاوز التنقل</a>
     <Sidebar items={items} platformName={platformName} role={roleLabel(identity.role)}/>
@@ -55,6 +56,12 @@ export function AppShell({ identity, preferences, platformName, children }: { id
           </div>
         </div>
       </header>
+      {maintenance && <aside role="status" aria-live="polite" data-testid="maintenance-banner" className="border-b border-amber-200 bg-amber-50 text-amber-950">
+        <div className="mx-auto flex w-full max-w-[1280px] items-start gap-3 px-4 py-3 text-sm leading-6 sm:px-7 lg:px-10">
+          <Wrench className="mt-0.5 size-4 shrink-0" aria-hidden="true"/>
+          <p><span className="font-bold">تنبيه من المنصة:</span> {maintenance}</p>
+        </div>
+      </aside>}
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-[1280px] p-4 pb-24 sm:p-7 sm:pb-24 lg:p-10 lg:pb-12">{children}</main>
     </div>
     <nav aria-label="التنقل الرئيسي للهاتف" className="mobile-bottom-nav lg:hidden">

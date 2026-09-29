@@ -4,6 +4,15 @@ import { SUBJECT_COVER_KEYS } from "@/domain/core-models";
 const optionalText = (max: number) => z.string().trim().max(max).optional().transform((value) => value || undefined);
 const internalPath = z.string().trim().max(300).refine((value) => value.startsWith("/app"), "يجب أن يكون الرابط داخلياً");
 
+function isValidIanaTimezone(value: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const createLearningSubjectSchema = z.object({
   gradeId: z.string().uuid(),
   title: z.string().trim().min(2).max(120),
@@ -69,7 +78,7 @@ export const enrollStudentSchema = z.object({
 
 export const platformSettingsSchema = z.object({
   platformName: z.string().trim().min(2).max(80),
-  timezone: z.string().trim().min(1).max(80),
+  timezone: z.string().trim().min(1).max(80).refine(isValidIanaTimezone, "استخدم منطقة زمنية IANA صالحة مثل Asia/Qatar"),
   maintenanceMessage: optionalText(300),
 });
 
