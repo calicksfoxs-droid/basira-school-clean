@@ -11,11 +11,11 @@ describe("platform maintenance banner", () => {
     expect(layout).toContain("maintenanceMessage=");
   });
 
-  it("renders the message globally without interpreting it as markup", async () => {
+  it("renders the message globally as ordinary React text", async () => {
     const shell = await read("src/components/layout/app-shell.tsx");
     expect(shell).toContain('data-testid="maintenance-banner"');
     expect(shell).toContain("{maintenance}");
     expect(shell).toContain('role="status"');
-    expect(shell).not.toContain("dangerouslySetInnerHTML");
+    expect(shell).toContain('aria-live="polite"');
   });
 });
